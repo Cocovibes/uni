@@ -63,7 +63,7 @@ sube la nota; la rampa solo evita el desastre.
 ## Instalación
 
 ```bash
-git clone https://github.com/<usuario>/uni.git ~/uni
+git clone https://github.com/Cocovibes/uni.git ~/uni
 cd ~/uni && ./instalar.sh
 ```
 
