@@ -36,15 +36,21 @@ requisitos() {
 }
 
 # ──────────────────── plugins de Obsidian ──────────────────────────
-# id|repo canónico|versión fijada|assets
+# id|repo canónico|tag de la release|versión que declara el manifest|assets
+#
 # El repo sale del registro oficial (github.com/obsidianmd/obsidian-releases,
 # community-plugins.json). Tras bajarlo se comprueba que el id del manifest
 # coincide con el esperado: así se detecta que una release esté publicada bajo
 # otro id (le pasa a Calendar, cuya "latest" es una beta con id calendar-beta).
+#
+# El tag y la versión del manifest se llevan por separado porque no siempre
+# coinciden: la release 0.5.70 de Dataview empaqueta un manifest que sigue
+# diciendo 0.5.68 (upstream no subió el número). Mezclarlos haría que el
+# instalador se creyese desactualizado y volviera a bajarlo cada vez.
 PLUGINS=(
-  "dataview|blacksmithgu/obsidian-dataview|0.5.68|main.js manifest.json styles.css"
-  "obsidian-tasks-plugin|obsidian-tasks-group/obsidian-tasks|8.3.0|main.js manifest.json styles.css"
-  "calendar|liamcain/obsidian-calendar-plugin|1.5.10|main.js manifest.json"
+  "dataview|blacksmithgu/obsidian-dataview|0.5.70|0.5.68|main.js manifest.json styles.css"
+  "obsidian-tasks-plugin|obsidian-tasks-group/obsidian-tasks|8.3.0|8.3.0|main.js manifest.json styles.css"
+  "calendar|liamcain/obsidian-calendar-plugin|1.5.10|1.5.10|main.js manifest.json"
 )
 
 plugins() {
@@ -52,19 +58,19 @@ plugins() {
   command -v curl >/dev/null || { warn "Falta curl; me salto los plugins."; return 0; }
 
   for linea in "${PLUGINS[@]}"; do
-    IFS='|' read -r id repo ver assets <<<"$linea"
+    IFS='|' read -r id repo tag mver assets <<<"$linea"
     destino="$VAULT/.obsidian/plugins/$id"
 
     if [ -f "$destino/manifest.json" ] &&
-       [ "$("$PY" -c "import json;print(json.load(open('$destino/manifest.json'))['version'])" 2>/dev/null)" = "$ver" ]; then
-      ok "$id $ver (ya estaba)"
+       [ "$("$PY" -c "import json;print(json.load(open('$destino/manifest.json'))['version'])" 2>/dev/null)" = "$mver" ]; then
+      ok "$id $tag (ya estaba)"
       continue
     fi
 
     tmp="$(mktemp -d)"
     for a in $assets; do
       curl -fsSL -o "$tmp/$a" \
-        "https://github.com/$repo/releases/download/$ver/$a" \
+        "https://github.com/$repo/releases/download/$tag/$a" \
         || { warn "$id: no se pudo bajar $a"; rm -rf "$tmp"; continue 2; }
     done
 
@@ -77,7 +83,7 @@ plugins() {
     mkdir -p "$destino"
     for a in $assets; do cp "$tmp/$a" "$destino/$a"; done
     rm -rf "$tmp"
-    ok "$id $ver ← $repo (id verificado)"
+    ok "$id $tag ← $repo (id verificado)"
   done
 
   # Obsidian solo carga los que estén en esta lista.

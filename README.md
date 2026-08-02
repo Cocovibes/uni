@@ -95,9 +95,9 @@ Se instalan desde el repo canónico que indica el
 en una versión fijada, y **se comprueba que el `id` del manifest descargado sea
 el esperado**:
 
-| Plugin | Versión | Para qué |
+| Plugin | Release | Para qué |
 |--------|---------|----------|
-| [Dataview](https://github.com/blacksmithgu/obsidian-dataview) | 0.5.68 | Tablas del Panel y cuenta atrás |
+| [Dataview](https://github.com/blacksmithgu/obsidian-dataview) | 0.5.70 | Tablas del Panel y cuenta atrás |
 | [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) | 8.3.0 | "Hoy y atrasado", tareas con fecha |
 | [Calendar](https://github.com/liamcain/obsidian-calendar-plugin) | 1.5.10 | Vista de mes en la barra lateral |
 
@@ -108,6 +108,11 @@ Esa comprobación no es teatro. Dos candidatos cayeron por ella:
   (`calendar-beta`). Por eso la versión va fijada a la 1.5.10 estable.
 - **Full Calendar**: la URL del registro redirige a `community-archive/`.
   Archivado, sin un commit desde noviembre de 2024. Descartado.
+
+Y un tercer detalle: la release **0.5.70 de Dataview empaqueta un
+`manifest.json` que sigue diciendo `0.5.68`**. Obsidian muestra por tanto una
+versión que no es la que corre. Por eso el instalador lleva el tag y la versión
+declarada en campos separados.
 
 También se descarta **Templater** a propósito, aunque sea el plugin más
 descargado: ejecuta JavaScript arbitrario desde tus notas, y el plugin
