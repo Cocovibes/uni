@@ -1,0 +1,11 @@
+[Unit]
+Description=Avisa cada mañana del plan de estudio
+
+[Timer]
+OnCalendar=*-*-* 08:30
+# Si el portátil estaba apagado a las 08:30, salta al encender.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Plan de estudio de hoy (notificación)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+# notify-send necesita el bus de sesión; systemd --user no lo hereda solo.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+ExecStart=@PY@ @VAULT@/uni.py sync
+ExecStart=@PY@ @VAULT@/uni.py notificar

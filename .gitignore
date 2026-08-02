@@ -1,0 +1,29 @@
+# ─── Datos personales: NO se publican ───────────────────────────────
+# Los exámenes y asignaturas reales son tuyos. El repo solo lleva la
+# estructura y las plantillas; en Ejemplos/ hay una muestra de cada uno.
+/Exámenes/*
+/Asignaturas/*
+!/Exámenes/.gitkeep
+!/Asignaturas/.gitkeep
+
+# Diario, adjuntos y papelera del vault
+/Diario/
+/Adjuntos/
+/.trash/
+
+# Calendario generado (se reconstruye con `uni sync`)
+/out/
+
+# ─── Estado local de Obsidian ───────────────────────────────────────
+# workspace.json se reescribe cada vez que mueves un panel.
+/.obsidian/workspace.json
+/.obsidian/workspace-mobile.json
+/.obsidian/graph.json
+/.obsidian/appearance.json
+
+# El código de los plugins no se redistribuye: lo baja instalar.sh
+# desde el repo canónico de cada uno, verificando el id del manifest.
+/.obsidian/plugins/
+
+__pycache__/
+*.pyc

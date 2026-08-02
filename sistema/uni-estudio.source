@@ -1,0 +1,33 @@
+# Fuente de Evolution Data Server: enlaza el .ics generado con GNOME Calendar
+# EN VIVO. No es una importación — cada `uni sync` se ve al momento, sin
+# duplicar eventos y sin reimportar nada.
+#
+# Va en ~/.config/evolution/sources/uni-estudio.source
+#
+# Dos detalles que cuestan encontrar:
+#   · La sección es [Local Backend], CON ESPACIO. Con [Local] se ignora en
+#     silencio y EDS se crea un calendario vacío suyo.
+#   · CustomFile es un GFile: necesita URI file://, no una ruta pelada.
+
+[Data Source]
+DisplayName=Uni — Estudio
+Enabled=true
+Parent=local-stub
+
+[Calendar]
+BackendName=local
+Color=#e01b24
+Selected=true
+Order=1
+
+[Local Backend]
+CustomFile=file://@VAULT@/out/uni-estudio.ics
+Writable=false
+
+[Offline]
+StaySynchronized=true
+
+[Refresh]
+Enabled=true
+EnabledOnMeteredNetwork=true
+IntervalMinutes=30

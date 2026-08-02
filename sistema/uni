@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Atajo para el sistema de estudio. `uni` sin argumentos = plan de hoy.
+exec python3 "@VAULT@/uni.py" "$@"
