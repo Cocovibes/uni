@@ -44,7 +44,7 @@ marcadores HTML y lo reescribe cada vez, conservando lo que hayas marcado con
 `[x]` aunque muevas la fecha del examen:
 
 ```md
-<!-- RAMPA:INICIO — lo genera uni.py; los [x] se conservan -->
+<!-- RAMPA:INICIO -->
 - [x] D-14 · Inventario — listar temas, puntuar confianza 0-3, bajar exámenes de otros años (30 min) 📅 2026-10-30
 - [ ] D-10 · Ataque a lo peor — los 2 temas más flojos, 3 problemas de cada uno, con apuntes (90 min) 📅 2026-11-03
 - [ ] D-7 · Barrido a libro cerrado — 1 problema de CADA tema, cronometrado, sin apuntes — es el diagnóstico (90 min) 📅 2026-11-06
@@ -55,5 +55,8 @@ marcadores HTML y lo reescribe cada vez, conservando lo que hayas marcado con
 <!-- RAMPA:FIN -->
 ```
 
-Aquí va dentro de un bloque de código a propósito, para que las tareas de
-ejemplo no salgan en las consultas del Panel. En una nota real van sueltas.
+Aquí va dentro de un bloque de código a propósito, y los marcadores están
+**abreviados**: los de verdad llevan un comentario más largo. Así esta nota de
+ejemplo se puede copiar a `Exámenes/` sin que `uni sync` escriba el plan dentro
+del bloque de código, donde las tareas quedarían inertes. Si la nota no tiene
+marcadores, `uni.py` añade la sección al final ya bien puesta.
