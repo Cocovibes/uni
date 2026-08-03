@@ -43,6 +43,10 @@ FROM "Asignaturas"
 SORT file.name ASC
 ```
 
+Los materiales de cada una están enlazados dentro de su nota, y todos juntos
+en [[Materiales]]. Los reenlaza `uni sync`; si dejas un PDF en la carpeta de
+una asignatura, aparece solo.
+
 ---
 
 ## Cómo se usa

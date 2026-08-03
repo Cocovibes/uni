@@ -6,6 +6,9 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/uni-drive
+# Si el sync ha traído material nuevo de Drive, que quede enlazado sin esperar
+# al sync de las 08:30. Con '-' un fallo aquí no tumba la unidad.
+ExecStartPost=-%h/.local/bin/uni sync
 # Un fallo puntual (red caída, Drive con hipo) no debe marcar la unidad como
 # rota: el siguiente ciclo lo arregla.
 SuccessExitStatus=0 1

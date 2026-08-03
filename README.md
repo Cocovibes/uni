@@ -137,9 +137,34 @@ uni            plan de hoy
 uni nuevo      alta de un examen (nota + asignatura + plan + calendario)
 uni ventana    la misma ventanita, a mano
 uni proximos   siguientes 14 días
-uni sync       regenera notas + calendario
+uni sync       regenera notas + calendario + índice de materiales
+uni materiales solo reenlaza los materiales
 uni-drive      sincroniza con Google Drive (si lo has configurado)
 ```
+
+## El grafo
+
+Un PDF suelto en una carpeta no es nodo de nada: el grafo de Obsidian se
+dibuja con los `[[enlaces]]`, y una carpeta no es un enlace. Por eso `uni sync`
+recorre `Curso/Cuatrimestre/Asignatura/` y escribe, dentro de la nota de cada
+asignatura, un bloque con un enlace a cada material; más un `Materiales.md`
+que enlaza las asignaturas. Con eso el grafo queda:
+
+```
+Materiales → Asignatura → cada PDF
+Examen ────→ Asignatura          (por el frontmatter `asignatura:`)
+```
+
+Como todo lo que genera este motor, va entre marcadores
+(`MATERIALES:INICIO`/`FIN`): lo que escribas fuera se conserva.
+
+Para verlos hay que decirle a Obsidian que enseñe los adjuntos —
+`.obsidian/graph.json` con `showAttachments: true`, y `showUnsupportedFiles`
+en `app.json` para que `.xlsx`, `.docx` y `.zip` existan siquiera.
+
+Se reindexa solo: en el `uni sync` diario de las 08:30, y después de cada
+sincronización con Drive, para que el material que baje de la nube quede
+enlazado sin esperar al día siguiente.
 
 **Zona horaria:** `uni.py` la fija en `TZ = ZoneInfo("Atlantic/Canary")`.
 Cámbiala si no vives en Canarias. Los eventos se escriben en UTC ya convertidos,

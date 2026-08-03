@@ -7,7 +7,8 @@ uni.py — motor del vault. Lee las notas de Exámenes/ y Asignaturas/ y:
 
     uni ventana     ventanita de alta rápida (la abre Ctrl+Shift+Ñ)
     uni nuevo       alta de un examen: nota + asignatura + plan + calendario
-    uni sync        regenera todo
+    uni sync        regenera todo (incluye el índice de materiales)
+    uni materiales  solo reenlaza los materiales de las asignaturas
     uni hoy         plan de hoy
     uni proximos    siguientes 14 días
     uni notificar   notificación de escritorio (la lanza el timer de systemd)
@@ -444,6 +445,110 @@ def crear_examen(asignatura, titulo, fecha, dias, peso, hora, temas,
     return ruta
 
 
+# ──────────── índice de materiales (lo que llena el grafo) ─────────
+# Los PDFs de las asignaturas no son nodos de nada hasta que una nota los
+# enlaza. Esto recorre Curso/Cuatrimestre/Asignatura/ y escribe esos enlaces
+# dentro de la nota de cada asignatura, más un índice que las une.
+#
+# Solo se toca lo que hay entre los marcadores: lo que escribas fuera se queda.
+
+MAT_INICIO = "<!-- MATERIALES:INICIO — lo genera uni.py; escribe fuera del bloque -->"
+MAT_FIN = "<!-- MATERIALES:FIN -->"
+
+INDICE = BASE / "Materiales.md"
+
+# Carpetas de la raíz que son del sistema, no cursos.
+NO_CURSOS = {"Asignaturas", "Exámenes", "Ejemplos", "Plantillas", "sistema",
+             "out", "__pycache__"}
+
+
+def cursos():
+    """[(curso, cuatrimestre, asignatura, ruta)] leído del árbol de carpetas.
+
+    Espera Curso/Cuatrimestre/Asignatura/. Lo que cuelgue a otra profundidad
+    no se indexa: sin una convención fija no hay forma de saber qué es una
+    asignatura y qué una subcarpeta suya.
+    """
+    out = []
+    for curso in sorted(p for p in BASE.iterdir() if p.is_dir()
+                        and not p.name.startswith(".")
+                        and p.name not in NO_CURSOS):
+        for cuatri in sorted(q for q in curso.iterdir() if q.is_dir()):
+            asigs = sorted(a for a in cuatri.iterdir() if a.is_dir())
+            # Un cuatrimestre aún sin asignaturas también sale en el índice:
+            # es el que estás preparando.
+            out.append((curso.name, cuatri.name, None, None))
+            out += [(curso.name, cuatri.name, a.name, a) for a in asigs]
+    return out
+
+
+def poner_bloque(texto, inicio, fin, cuerpo, encabezado=""):
+    """Sustituye el bloque delimitado, o lo añade al final si no estaba."""
+    nuevo = inicio + "\n" + cuerpo + "\n" + fin
+    m = re.search(re.escape(inicio) + r".*?" + re.escape(fin), texto, re.S)
+    if m:
+        return texto[:m.start()] + nuevo + texto[m.end():]
+    return texto.rstrip() + "\n\n" + (encabezado + "\n" if encabezado else "") \
+        + nuevo + "\n"
+
+
+def materiales_de(carpeta):
+    """Enlaces a todo lo que cuelga de la carpeta de una asignatura."""
+    ls = []
+    for f in sorted(carpeta.rglob("*")):
+        if f.is_dir() or f.name.startswith("."):
+            continue
+        rel = f.relative_to(BASE).as_posix()
+        sub = f.parent.relative_to(carpeta).as_posix()
+        etiqueta = f.stem if sub == "." else f"{sub}/{f.stem}"
+        ls.append(f"- [[{rel}|{etiqueta}]]")
+    return ls
+
+
+def indexar_materiales():
+    """Enlaza los materiales desde las notas de asignatura y arma el índice."""
+    arbol, n_arch, n_asig = {}, 0, 0
+    for curso, cuatri, asig, ruta in cursos():
+        cuatris = arbol.setdefault(curso, {}).setdefault(cuatri, [])
+        if asig is None:                      # cuatrimestre aún vacío
+            continue
+        cuatris.append(asig)
+        n_asig += 1
+
+        enlaces = materiales_de(ruta)
+        n_arch += len(enlaces)
+        nota, _ = crear_asignatura(asig)
+        cuerpo = "\n".join(enlaces) if enlaces else "*(carpeta vacía)*"
+        nota.write_text(
+            poner_bloque(nota.read_text(encoding="utf-8"),
+                         MAT_INICIO, MAT_FIN, cuerpo, "## Materiales"),
+            encoding="utf-8")
+
+    if not arbol:
+        return 0, 0
+
+    lineas = []
+    for curso, cuatris in arbol.items():
+        lineas.append(f"\n## {curso}")
+        for cuatri, asigs in cuatris.items():
+            lineas.append(f"\n### {cuatri}\n")
+            lineas += [f"- [[{a}]]" for a in asigs] or ["*(sin asignaturas todavía)*"]
+    cuerpo = "\n".join(lineas).strip()
+
+    viejo = INDICE.read_text(encoding="utf-8") if INDICE.exists() else \
+        "# Materiales\n\nÍndice de las carpetas de cada curso. Lo genera\n" \
+        "`uni sync`: si añades un PDF, aparece solo.\n"
+    INDICE.write_text(poner_bloque(viejo, MAT_INICIO, MAT_FIN, cuerpo),
+                      encoding="utf-8")
+
+    return n_asig, n_arch
+
+
+def cmd_materiales():
+    n_asig, n_arch = indexar_materiales()
+    print(f"✓ {n_asig} asignaturas · {n_arch} materiales enlazados")
+
+
 def cmd_nuevo(argv):
     ap = argparse.ArgumentParser(
         prog="uni nuevo", add_help=True,
@@ -518,6 +623,9 @@ def cmd_sync():
     print(f"✓ {len(ex)} exámenes · {n} sesiones · {len(sem)} bloques semanales"
           f" · {tot_hechas} tareas ya hechas conservadas")
     print(f"✓ {SALIDA}")
+    n_asig, n_arch = indexar_materiales()
+    if n_asig:
+        print(f"✓ {n_asig} asignaturas · {n_arch} materiales enlazados")
 
 
 def cmd_hoy():
@@ -570,7 +678,8 @@ def cmd_ventana():
 
 
 CMDS = {"sync": cmd_sync, "hoy": cmd_hoy, "proximos": cmd_proximos,
-        "notificar": cmd_notificar, "ventana": cmd_ventana}
+        "notificar": cmd_notificar, "ventana": cmd_ventana,
+        "materiales": cmd_materiales}
 
 if __name__ == "__main__":
     a = sys.argv[1] if len(sys.argv) > 1 else "hoy"

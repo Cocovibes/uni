@@ -5,5 +5,5 @@
   "attachmentFolderPath": "Adjuntos",
   "trashOption": "local",
   "promptDelete": false,
-  "showUnsupportedFiles": false
+  "showUnsupportedFiles": true
 }
