@@ -16,8 +16,12 @@
 # sincroniza, dos máquinas se pelean por un archivo que ninguna necesita.
 - /out/**
 
-# Papelera de Obsidian y basura de Python.
+# Papelera de Obsidian y basura de Python. Los directorios se excluyen con la
+# barra final además del contenido: si no, --create-empty-src-dirs los recrea
+# vacíos en el otro lado aunque no se copie nada dentro.
+- /.trash/
 - /.trash/**
+- **/__pycache__/
 - **/__pycache__/**
 - **/*.pyc
 
