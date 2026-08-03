@@ -1,0 +1,12 @@
+[Unit]
+Description=Sincroniza el vault con Google Drive cada 15 min
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+# Si el portátil estaba apagado, sincroniza al encender.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

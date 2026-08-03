@@ -5,6 +5,8 @@ uni.py — motor del vault. Lee las notas de Exámenes/ y Asignaturas/ y:
   · genera out/uni-estudio.ics (lo lee GNOME Calendar en vivo)
   · saca el plan de hoy por terminal / notificación
 
+    uni ventana     ventanita de alta rápida (la abre Ctrl+Shift+Ñ)
+    uni nuevo       alta de un examen: nota + asignatura + plan + calendario
     uni sync        regenera todo
     uni hoy         plan de hoy
     uni proximos    siguientes 14 días
@@ -14,6 +16,7 @@ La fuente de verdad son las notas. Este script nunca las inventa: solo
 rellena el bloque entre RAMPA:INICIO y RAMPA:FIN, conservando lo marcado.
 """
 
+import argparse
 import hashlib
 import re
 import subprocess
@@ -35,34 +38,104 @@ AVISO_MIN = 30
 INICIO = "<!-- RAMPA:INICIO — lo genera uni.py; los [x] se conservan -->"
 FIN = "<!-- RAMPA:FIN -->"
 
-# (días antes, nombre, minutos, qué hacer)
-RAMPA = [
-    (14, "Inventario", 30,
-     "listar temas, puntuar confianza 0-3, bajar exámenes de otros años"),
-    (10, "Ataque a lo peor", 90,
-     "los 2 temas más flojos, 3 problemas de cada uno, con apuntes"),
-    (7, "Barrido a libro cerrado", 90,
-     "1 problema de CADA tema, cronometrado, sin apuntes — es el diagnóstico"),
-    (5, "Huecos", 90,
-     "solo lo que falló en D-7, hasta que salga sin mirar"),
-    (3, "Simulacro", None,
-     "examen entero de otro año, condiciones reales, sin corregir hoy"),
-    (2, "Corrección", 60,
-     "corregir el simulacro, repasar solo los errores, anotarlos en Trampas"),
-    (1, "Formulario de memoria", 45,
-     "escribir el formulario de memoria en un folio, comparar, dormir 8h"),
+# Cuántos días de estudio se planifican si la nota no dice otra cosa.
+DIAS_ESTUDIO_DEF = 5
+
+# Las sesiones, en orden pedagógico. (clave, nombre, minutos, qué hacer, prioridad)
+#
+# La prioridad decide cuáles sobreviven cuando hay menos días que sesiones:
+# la 1 no se cae nunca. Las dependencias se respetan solas — "Huecos" (5) solo
+# entra si ya entró "Barrido" (3), y "Corrección" (4) si entró "Simulacro" (2).
+SESIONES = [
+    ("inventario", "Inventario", 30,
+     "listar temas, puntuar confianza 0-3, bajar exámenes de otros años", 7),
+    ("ataque", "Ataque a lo peor", 90,
+     "los 2 temas más flojos, 3 problemas de cada uno, con apuntes", 6),
+    ("barrido", "Barrido a libro cerrado", 90,
+     "1 problema de CADA tema, cronometrado, sin apuntes — es el diagnóstico", 3),
+    ("huecos", "Huecos", 90,
+     "solo lo que falló en el barrido, hasta que salga sin mirar", 5),
+    ("simulacro", "Simulacro", None,
+     "examen entero de otro año, condiciones reales, sin corregir hoy", 2),
+    ("correccion", "Corrección", 60,
+     "corregir el simulacro, repasar solo los errores, anotarlos en Trampas", 4),
+    ("formulario", "Formulario de memoria", 45,
+     "escribir el formulario de memoria en un folio, comparar, dormir 8h", 1),
 ]
+
+# Con más días que sesiones, los de delante se llenan con temario de fondo.
+FONDO = ("fondo", "Estudio de fondo", 60,
+         "temario por bloques con apuntes: leer, resumir y 2 problemas de cada uno")
+
+# Offsets del modo 'auto' (dias: auto) — la rampa clásica, escalada por peso.
+AUTO_OFFSETS = {"inventario": 14, "ataque": 10, "barrido": 7, "huecos": 5,
+                "simulacro": 3, "correccion": 2, "formulario": 1}
 
 DIAS = {"lunes": 0, "martes": 1, "miercoles": 2, "miércoles": 2, "jueves": 3,
         "viernes": 4, "sabado": 5, "sábado": 5, "domingo": 6}
 
 
-def rampa_para(peso):
+def a_dias(v):
+    """5 · '5' · '5 dias' · '1 semana' · 'auto' → 5 | 'auto'."""
+    if v is None or v == "":
+        return DIAS_ESTUDIO_DEF
+    if isinstance(v, bool):
+        raise ValueError(f"'dias' no entendido: {v!r}")
+    if isinstance(v, int):
+        return max(1, v)
+    t = str(v).strip().lower()
+    if t in ("auto", "peso"):
+        return "auto"
+    m = re.match(r"(\d+)\s*(?:sem|semana|semanas)\b", t)
+    if m:
+        return max(1, int(m.group(1)) * 7)
+    m = re.match(r"(\d+)", t)
+    if m:
+        return max(1, int(m.group(1)))
+    raise ValueError(f"'dias' no entendido: {v!r} "
+                     "(un número, '1 semana' o 'auto')")
+
+
+def sesiones_para(n):
+    """Exactamente n sesiones, una por día, en orden pedagógico."""
+    if n >= len(SESIONES):
+        extra = n - len(SESIONES)
+        fondo = [(FONDO[0], f"{FONDO[1]} ({i + 1}/{extra})", FONDO[2], FONDO[3])
+                 for i in range(extra)]
+        return fondo + [s[:4] for s in SESIONES]
+    elegidas = sorted(SESIONES, key=lambda s: s[4])[:n]
+    return [s[:4] for s in SESIONES if s in elegidas]
+
+
+def rampa_por_peso(peso):
+    """Modo 'auto': la rampa clásica, con la longitud que decide el peso."""
     if peso >= 35:
-        return RAMPA
-    if peso >= 15:
-        return [s for s in RAMPA if s[0] in (10, 7, 5, 3, 1)]
-    return [s for s in RAMPA if s[0] in (5, 3, 1)]
+        claves = set(AUTO_OFFSETS)
+    elif peso >= 15:
+        claves = {"ataque", "barrido", "huecos", "simulacro", "formulario"}
+    else:
+        claves = {"huecos", "simulacro", "formulario"}
+    return [s[:4] for s in SESIONES if s[0] in claves]
+
+
+def plan_de(ex):
+    """El plan concreto de un examen: [(días antes, nombre, minutos, tarea)].
+
+    Con 'dias: N' son N sesiones, una por día, en los N días naturales
+    anteriores (D-N … D-1). Si el examen está más cerca que N días, el plan se
+    encoge a los días que quedan en vez de generar sesiones ya pasadas.
+    """
+    if ex["dias"] == "auto":
+        return [(AUTO_OFFSETS[c], nom, mins, t)
+                for c, nom, mins, t in rampa_por_peso(ex["peso"])]
+    n = ex["dias"]
+    quedan = (ex["fecha"] - date.today()).days
+    if 0 < quedan < n:
+        n = quedan
+    if n < 1:
+        return []
+    return [(n - i, nom, mins, t)
+            for i, (_c, nom, mins, t) in enumerate(sesiones_para(n))]
 
 
 # ───────────────────────── leer las notas ──────────────────────────
@@ -113,6 +186,7 @@ def leer_examenes():
                 "hora": str(fm.get("hora", "09:00")),
                 "formato": fm.get("formato", "examen"),
                 "peso": int(fm.get("peso", 20)),
+                "dias": a_dias(fm.get("dias")),
                 "temas": fm.get("temas") or [],
                 "duracion": int(fm.get("duracion_examen", 120)),
             })
@@ -144,7 +218,10 @@ def leer_semanal():
 
 # ──────────────── escribir la rampa dentro de la nota ──────────────
 
-RE_TAREA = re.compile(r"^- \[(.)\] D-(\d+) ")
+# Se guarda por NOMBRE de sesión, no por D-N: con 'dias' variable los offsets
+# se mueven, y lo hecho debe sobrevivir tanto a cambiar la fecha del examen
+# como a cambiar la ventana de estudio.
+RE_TAREA = re.compile(r"^- \[(.)\] D-\d+ · ([^—]+) —")
 
 
 def inyectar_rampa(ex):
@@ -157,12 +234,12 @@ def inyectar_rampa(ex):
         for linea in bloque.group(1).splitlines():
             m = RE_TAREA.match(linea.strip())
             if m and m.group(1).lower() == "x":
-                hechas.add(int(m.group(2)))
+                hechas.add(m.group(2).strip())
 
     lineas = []
-    for dias, nombre, mins, tarea in rampa_para(ex["peso"]):
+    for dias, nombre, mins, tarea in plan_de(ex):
         cuando = ex["fecha"] - timedelta(days=dias)
-        marca = "x" if dias in hechas else " "
+        marca = "x" if nombre in hechas else " "
         dur = mins or ex["duracion"]
         lineas.append(f"- [{marca}] D-{dias} · {nombre} — {tarea} "
                       f"({dur} min) 📅 {cuando.isoformat()}")
@@ -227,7 +304,7 @@ def construir_ics(examenes, semanal):
                      utc(ex["fecha"], ex["hora"]), ex["duracion"],
                      f"🎓 EXAMEN — {ex['asignatura']} ({ex['formato']}, {ex['peso']}%)",
                      f"Temas: {temas}", 60)
-        for dias, nombre, mins, tarea in rampa_para(ex["peso"]):
+        for dias, nombre, mins, tarea in plan_de(ex):
             cuando = ex["fecha"] - timedelta(days=dias)
             if cuando < date.today():
                 continue
@@ -256,7 +333,7 @@ def construir_ics(examenes, semanal):
 def agenda(examenes, desde, hasta):
     out = []
     for ex in examenes:
-        for dias, nombre, mins, tarea in rampa_para(ex["peso"]):
+        for dias, nombre, mins, tarea in plan_de(ex):
             cuando = ex["fecha"] - timedelta(days=dias)
             if desde <= cuando <= hasta:
                 out.append((cuando, dias, ex["asignatura"], nombre,
@@ -265,6 +342,167 @@ def agenda(examenes, desde, hasta):
             out.append((ex["fecha"], 0, ex["asignatura"], "🎓 EXAMEN",
                         ex["duracion"], "Suerte."))
     return sorted(out)
+
+
+# ─────────────────── alta rápida de un examen ──────────────────────
+
+RE_INVALIDO = re.compile(r'[\\/:*?"<>|]')
+
+PLANTILLA_ASIGNATURA = """---
+nombre: {nombre}
+---
+
+# {nombre}
+
+Materiales: ruta o enlace a los apuntes y hojas de problemas.
+
+## Exámenes
+
+```dataview
+TABLE WITHOUT ID file.link AS "Examen", fecha AS "Fecha", peso AS "Peso %"
+FROM "Exámenes"
+WHERE tipo = "examen" AND contains(string(asignatura), "{nombre}")
+SORT fecha ASC
+```
+
+## Trampas
+Errores que ya he cometido. Una línea cada uno, en cuanto pasan. Releer esta
+sección antes de cada examen.
+
+-
+
+## Dudas para clase
+
+-
+"""
+
+
+def a_fecha_flexible(t):
+    """'2026-11-13' · '13/11' · '13-11-2026' → date. Sin año, la próxima vez."""
+    t = str(t).strip()
+    try:
+        return date.fromisoformat(t)
+    except ValueError:
+        pass
+    m = re.fullmatch(r"(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?", t)
+    if not m:
+        raise ValueError(f"fecha no entendida: {t!r} (usa AAAA-MM-DD o DD/MM)")
+    dia, mes, anio = int(m.group(1)), int(m.group(2)), m.group(3)
+    if anio:
+        a = int(anio)
+        return date(a + 2000 if a < 100 else a, mes, dia)
+    hoy = date.today()
+    f = date(hoy.year, mes, dia)
+    return f if f >= hoy else date(hoy.year + 1, mes, dia)
+
+
+def a_hora(t):
+    """'9:00' · '09:00' → '09:00'. Se valida al escribirla, no al sincronizar."""
+    t = str(t).strip() or "09:00"
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", t)
+    if not m or not (0 <= int(m.group(1)) < 24 and 0 <= int(m.group(2)) < 60):
+        raise ValueError(f"hora no entendida: {t!r} (usa HH:MM)")
+    return f"{int(m.group(1)):02d}:{m.group(2)}"
+
+
+def crear_asignatura(nombre):
+    """Crea Asignaturas/<nombre>.md si falta, para que el [[enlace]] resuelva."""
+    ruta = DIR_AS / f"{RE_INVALIDO.sub('-', nombre)}.md"
+    if ruta.exists():
+        return ruta, False
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_text(PLANTILLA_ASIGNATURA.format(nombre=nombre), encoding="utf-8")
+    return ruta, True
+
+
+def crear_examen(asignatura, titulo, fecha, dias, peso, hora, temas,
+                 duracion, formato):
+    ruta = DIR_EX / f"{RE_INVALIDO.sub('-', f'{asignatura} — {titulo}').strip()}.md"
+    if ruta.exists():
+        raise FileExistsError(ruta)
+    bloque = ("\n" + "\n".join(f"  - {t}" for t in temas)) if temas else " []"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_text(
+        "---\n"
+        "tipo: examen\n"
+        f'asignatura: "[[{asignatura}]]"\n'
+        f"fecha: {fecha.isoformat()}\n"
+        f'hora: "{hora}"\n'
+        f"formato: {formato}\n"
+        f"peso: {peso}\n"
+        f"dias: {dias}\n"
+        f"temas:{bloque}\n"
+        f"duracion_examen: {duracion}\n"
+        "---\n"
+        f"\n# {asignatura} — {titulo}\n"
+        "\n## Exámenes de otros años\n\n-\n"
+        "\n## Simulacro\n"
+        "| Fecha | Nota | Qué falló |\n"
+        "|-------|------|-----------|\n"
+        "|       |      |           |\n",
+        encoding="utf-8")
+    return ruta
+
+
+def cmd_nuevo(argv):
+    ap = argparse.ArgumentParser(
+        prog="uni nuevo", add_help=True,
+        description="Alta de un examen: crea la nota, la asignatura si falta, "
+                    "escribe el plan y sincroniza el calendario.")
+    ap.add_argument("asignatura", nargs="?", help='p. ej. "Cálculo Diferencial"')
+    ap.add_argument("titulo", nargs="?", help='p. ej. "Parcial 2"')
+    ap.add_argument("fecha", nargs="?", help="AAAA-MM-DD o DD/MM")
+    ap.add_argument("-d", "--dias", default=None,
+                    help=f"días de estudio previos (def. {DIAS_ESTUDIO_DEF}; "
+                         "vale '1 semana' y 'auto' = según el peso)")
+    ap.add_argument("-p", "--peso", type=int, default=30, help="%% de la nota (def. 30)")
+    ap.add_argument("-o", "--hora", default="09:00", help="hora del examen (def. 09:00)")
+    ap.add_argument("-t", "--temas", default="", help="separados por comas")
+    ap.add_argument("-m", "--duracion", type=int, default=120,
+                    help="minutos de examen (def. 120)")
+    ap.add_argument("-f", "--formato", default=None,
+                    help="parcial, final… (def. el título)")
+    a = ap.parse_args(argv)
+
+    pide = not (a.asignatura and a.titulo and a.fecha)
+    asignatura = a.asignatura or input("Asignatura: ").strip()
+    titulo = a.titulo or input("Examen (p. ej. Parcial 2): ").strip()
+    fecha_txt = a.fecha or input("Fecha (AAAA-MM-DD o DD/MM): ").strip()
+    dias_txt = a.dias
+    if pide and dias_txt is None:
+        dias_txt = input(f"Días de estudio [{DIAS_ESTUDIO_DEF}]: ").strip() or None
+    if not (asignatura and titulo and fecha_txt):
+        sys.exit("Faltan datos: asignatura, examen y fecha.")
+
+    try:
+        fecha, dias = a_fecha_flexible(fecha_txt), a_dias(dias_txt)
+        hora = a_hora(a.hora)
+    except ValueError as e:
+        sys.exit(f"✗ {e}")
+    if fecha < date.today():
+        sys.exit(f"✗ esa fecha ya pasó ({fecha:%d/%m/%Y}).")
+
+    # La asignatura se crea DESPUÉS del examen: si el examen ya existía, no
+    # queremos dejar una nota de asignatura huérfana.
+    try:
+        ruta = crear_examen(asignatura, titulo, fecha, dias, a.peso, hora,
+                            [t.strip() for t in a.temas.split(",") if t.strip()],
+                            a.duracion, a.formato or titulo)
+    except FileExistsError as e:
+        sys.exit(f"✗ ya existe {Path(e.args[0]).name} — edítala o usa otro título.")
+    ruta_as, nueva = crear_asignatura(asignatura)
+
+    if nueva:
+        print(f"✓ asignatura nueva → {ruta_as.name}")
+    print(f"✓ {ruta.name}  ·  {fecha:%a %d/%m/%Y}  ·  {dias} días de estudio\n")
+
+    plan = plan_de({"fecha": fecha, "dias": dias, "peso": a.peso,
+                    "duracion": a.duracion})
+    for d, nombre, mins, _t in plan:
+        cuando = fecha - timedelta(days=d)
+        print(f"   D-{d:<2} {cuando:%a %d/%m}  {nombre}  ({mins or a.duracion} min)")
+    print()
+    cmd_sync()
 
 
 def cmd_sync():
@@ -321,11 +559,24 @@ def cmd_notificar():
                     "📚 Plan de hoy", cuerpo], check=False)
 
 
+def cmd_ventana():
+    """La ventanita de alta rápida. Es lo que cuelga de Ctrl+Shift+Ñ."""
+    try:
+        import ventana                      # perezoso: la CLI no necesita GTK
+    except ImportError as e:
+        sys.exit(f"✗ falta PyGObject/GTK4: {e}\n"
+                 "  En Fedora: sudo dnf install python3-gobject gtk4 libadwaita")
+    sys.exit(ventana.abrir(sys.modules[__name__]))
+
+
 CMDS = {"sync": cmd_sync, "hoy": cmd_hoy, "proximos": cmd_proximos,
-        "notificar": cmd_notificar}
+        "notificar": cmd_notificar, "ventana": cmd_ventana}
 
 if __name__ == "__main__":
     a = sys.argv[1] if len(sys.argv) > 1 else "hoy"
-    if a not in CMDS:
+    if a == "nuevo":
+        cmd_nuevo(sys.argv[2:])
+    elif a in CMDS:
+        CMDS[a]()
+    else:
         sys.exit(__doc__)
-    CMDS[a]()

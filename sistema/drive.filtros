@@ -1,0 +1,26 @@
+# Qué NO se sincroniza con Google Drive (sintaxis de filtros de rclone).
+# El orden importa: la primera regla que casa, manda.
+
+# El repo. Un syncer de archivos que copie .git a medias lo corrompe, y el
+# versionado ya lo lleva git contra su propio remoto.
+- /.git/**
+
+# Estado local de Obsidian: se reescribe cada vez que mueves un panel. Es
+# fábrica de conflictos y no aporta nada en la otra máquina.
+- /.obsidian/workspace.json
+- /.obsidian/workspace-mobile.json
+- /.obsidian/graph.json
+- /.obsidian/appearance.json
+
+# El .ics lo regenera `uni sync` y Evolution lo lee de la ruta local. Si se
+# sincroniza, dos máquinas se pelean por un archivo que ninguna necesita.
+- /out/**
+
+# Papelera de Obsidian y basura de Python.
+- /.trash/**
+- **/__pycache__/**
+- **/*.pyc
+
+# Todo lo demás sí: notas, exámenes, asignaturas, plantillas, plugins y los
+# PDFs de las asignaturas.
++ **

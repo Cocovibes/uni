@@ -1,0 +1,11 @@
+[Unit]
+Description=Sincroniza el vault con Google Drive (rclone bisync)
+# Sin red no hay nada que hacer; el timer lo reintenta en 15 min.
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/uni-drive
+# Un fallo puntual (red caída, Drive con hipo) no debe marcar la unidad como
+# rota: el siguiente ciclo lo arregla.
+SuccessExitStatus=0 1

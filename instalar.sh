@@ -4,6 +4,8 @@
 #
 #   ./instalar.sh              todo
 #   ./instalar.sh plugins      solo los plugins de Obsidian
+#   ./instalar.sh atajo        solo el atajo de teclado (Ctrl+Shift+Ñ)
+#   ./instalar.sh drive        solo la sincronización con Google Drive
 #
 # No usa sudo en ningún momento.
 
@@ -130,6 +132,85 @@ aviso() {
   info "pararlo: systemctl --user disable --now uni-hoy.timer"
 }
 
+# ───────────── atajo de teclado (GNOME custom keybinding) ──────────
+# Ctrl+Shift+Ñ abre la ventanita de alta rápida. La ñ es el keysym 'ntilde'.
+# Idempotente: reutiliza la entrada 'uni-nuevo' si ya está en la lista, y
+# respeta los atajos personalizados que el usuario tenga puestos.
+ATAJO_RUTA="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/uni-nuevo/"
+ATAJO_TECLA="${UNI_ATAJO:-<Control><Shift>ntilde}"
+
+atajo() {
+  head_ "Atajo de teclado"
+  command -v gsettings >/dev/null || { warn "Sin gsettings; me lo salto."; return 0; }
+  if ! gsettings writable org.gnome.settings-daemon.plugins.media-keys \
+       custom-keybindings >/dev/null 2>&1; then
+    info "no es una sesión GNOME; me lo salto (usa 'uni ventana')"
+    return 0
+  fi
+
+  local clave="org.gnome.settings-daemon.plugins.media-keys"
+  local hijo="$clave.custom-keybinding:$ATAJO_RUTA"
+
+  "$PY" - "$ATAJO_RUTA" <<'EOF'
+import ast, subprocess, sys
+ruta = sys.argv[1]
+clave = ["gsettings", "get", "org.gnome.settings-daemon.plugins.media-keys",
+         "custom-keybindings"]
+actual = subprocess.run(clave, capture_output=True, text=True).stdout.strip()
+actual = actual.removeprefix("@as ").strip()
+try:
+    lista = list(ast.literal_eval(actual)) if actual else []
+except (ValueError, SyntaxError):
+    lista = []
+if ruta not in lista:
+    lista.append(ruta)
+    subprocess.run(["gsettings", "set",
+                    "org.gnome.settings-daemon.plugins.media-keys",
+                    "custom-keybindings", str(lista)], check=True)
+EOF
+
+  gsettings set "$hijo" name "Uni — examen nuevo"
+  gsettings set "$hijo" command "$HOME/.local/bin/uni ventana"
+  gsettings set "$hijo" binding "$ATAJO_TECLA"
+  ok "$ATAJO_TECLA → uni ventana"
+  info "cambiarlo: UNI_ATAJO='<Control><Shift>e' ./instalar.sh atajo"
+}
+
+# ──────────────── sincronización con Google Drive ──────────────────
+# Solo se activa si rclone está instalado Y el remoto ya existe: si no, un
+# timer cada 15 min no haría más que apilar fallos en el journal.
+drive() {
+  head_ "Google Drive"
+  local remoto="${UNI_DRIVE_REMOTO:-drive}"
+  local carpeta="${UNI_DRIVE_CARPETA:-Obsidian/universidad}"
+
+  if ! command -v rclone >/dev/null; then
+    info "rclone no está; me lo salto"
+    info "  sudo dnf install rclone  &&  rclone config  &&  ./instalar.sh drive"
+    return 0
+  fi
+  if ! rclone listremotes | grep -qx "$remoto:"; then
+    info "rclone está, pero el remoto '$remoto:' aún no existe; me lo salto"
+    info "  rclone config  &&  ./instalar.sh drive"
+    return 0
+  fi
+
+  mkdir -p "$HOME/.local/bin"
+  sed -e "s|@VAULT@|$VAULT|g" -e "s|@REMOTO@|$remoto|g" -e "s|@CARPETA@|$carpeta|g" \
+      "$VAULT/sistema/uni-drive" > "$HOME/.local/bin/uni-drive"
+  chmod +x "$HOME/.local/bin/uni-drive"
+  ok "$HOME/.local/bin/uni-drive → $remoto:$carpeta"
+
+  command -v systemctl >/dev/null || { warn "Sin systemd; ejecútalo a mano."; return 0; }
+  d="$HOME/.config/systemd/user"; mkdir -p "$d"
+  cp "$VAULT/sistema/uni-drive.service" "$d/uni-drive.service"
+  cp "$VAULT/sistema/uni-drive.timer" "$d/uni-drive.timer"
+  systemctl --user daemon-reload
+  systemctl --user enable --now uni-drive.timer
+  ok "uni-drive.timer activo — cada 15 min"
+  info "primer sync: uni-drive   ·   pararlo: systemctl --user disable --now uni-drive.timer"
+}
+
 # ─────────────── calendario del sistema (GNOME/EDS) ────────────────
 calendario() {
   head_ "Calendario del sistema"
@@ -148,8 +229,10 @@ calendario() {
 # ───────────────────────────── main ────────────────────────────────
 case "${1:-todo}" in
   plugins) requisitos; plugins ;;
+  atajo)   atajo ;;
+  drive)   drive ;;
   todo)
-    requisitos; plugins; comando; aviso; calendario
+    requisitos; plugins; comando; aviso; atajo; drive; calendario
     head_ "Primer sync"
     mkdir -p "$VAULT/Exámenes" "$VAULT/Asignaturas"
     "$PY" "$VAULT/uni.py" sync

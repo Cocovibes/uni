@@ -47,11 +47,15 @@ SORT file.name ASC
 
 ## Cómo se usa
 
-1. **Un examen nuevo** → nota en `Exámenes/` (plantilla `Examen`), pon `fecha` y `peso`.
-2. Terminal: `uni sync`.
-3. El plan de estudio aparece solo dentro de la nota del examen, en el calendario
+1. **Un examen nuevo** → **Ctrl + Shift + Ñ**, rellenar y Guardar.
+   En terminal: `uni nuevo "Cálculo Diferencial" "Parcial 2" 13/11`
+   (o `uni nuevo` a secas y te lo pregunta). También vale la plantilla `Examen`
+   en `Exámenes/` + `uni sync`.
+2. El plan de estudio aparece solo dentro de la nota del examen, en el calendario
    del sistema, y a las 08:30 como notificación.
 
 Marcar `[x]` una tarea es seguro: `uni sync` conserva lo hecho.
 
-`peso` manda: ≥ 35 % → rampa completa (D-14…D-1) · 15-34 % → D-10,7,5,3,1 · < 15 % → D-5,3,1.
+`dias` manda: **N días de estudio → N sesiones, una por día** (D-N…D-1). Por
+defecto **5**. `--dias "1 semana"` para la rampa entera; `dias: auto` para el
+modo antiguo en el que mandaba el `peso`.

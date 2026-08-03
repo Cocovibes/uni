@@ -14,6 +14,10 @@
 # Calendario generado (se reconstruye con `uni sync`)
 /out/
 
+# rclone escribe aquí el hash del fichero de filtros para saber si ha cambiado.
+# Es estado local suyo, no configuración.
+/sistema/drive.filtros.md5
+
 # ─── Estado local de Obsidian ───────────────────────────────────────
 # workspace.json se reescribe cada vez que mueves un panel.
 /.obsidian/workspace.json

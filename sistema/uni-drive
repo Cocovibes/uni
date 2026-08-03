@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# uni-drive — sincroniza el vault con Google Drive en las dos direcciones.
+#
+#   uni-drive              un ciclo de sincronización
+#   uni-drive --resync     rehace la línea base (si bisync se queda atascado)
+#   uni-drive --dry-run    ensayo: dice qué haría, sin tocar nada
+#
+# Cualquier otro argumento se le pasa tal cual a rclone.
+#
+# Lo lanza uni-drive.timer cada 15 min. Necesita rclone y un remoto ya creado
+# con `rclone config`. El remoto y la carpeta se fijan al instalar; para usar
+# otros sin reinstalar:
+#
+#   UNI_DRIVE_REMOTO=otro UNI_DRIVE_CARPETA=Apuntes/vault uni-drive
+
+set -euo pipefail
+
+VAULT="@VAULT@"
+REMOTO="${UNI_DRIVE_REMOTO:-@REMOTO@}"
+CARPETA="${UNI_DRIVE_CARPETA:-@CARPETA@}"
+FILTROS="$VAULT/sistema/drive.filtros"
+MARCA="${XDG_STATE_HOME:-$HOME/.local/state}/uni/drive-inicializado"
+
+command -v rclone >/dev/null || {
+  echo "Falta rclone. En Fedora: sudo dnf install rclone" >&2; exit 1; }
+
+rclone listremotes | grep -qx "$REMOTO:" || {
+  echo "El remoto '$REMOTO:' no existe todavía. Créalo con: rclone config" >&2
+  exit 1; }
+
+# Si un ciclo tarda más que el timer, que el siguiente no se le monte encima.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/uni-drive.lock"
+flock -n 9 || { echo "· ya hay una sincronización en marcha"; exit 0; }
+
+args=(bisync "$VAULT" "$REMOTO:$CARPETA"
+      --filters-file "$FILTROS"
+      --create-empty-src-dirs
+      # Si los dos lados tocaron el mismo archivo, gana el más reciente y el
+      # otro se conserva renombrado: nunca se pierde nada en silencio.
+      --conflict-resolve newer
+      # Aguanta cortes de red y se recupera de una ejecución interrumpida.
+      --resilient
+      --recover
+      # Freno de mano: si algo va mal y quiere borrar más del 25 %, para.
+      --max-delete 25
+      --log-level INFO)
+
+# La primera vez no hay línea base y bisync se niega a funcionar sin ella.
+resync=""
+if [ "${1:-}" = "--resync" ]; then resync=1; shift; fi
+if [ -n "$resync" ] || [ ! -f "$MARCA" ]; then
+  echo "· creando la línea base (--resync)"
+  args+=(--resync)
+fi
+
+# Lo que venga detrás va tal cual a rclone: --dry-run, --verbose, lo que sea.
+args+=("${@+$@}")
+
+rclone "${args[@]}"
+
+# Un ensayo no ha sincronizado nada, así que no cuenta como línea base.
+case " ${*-} " in *" --dry-run "*) exit 0 ;; esac
+mkdir -p "$(dirname "$MARCA")"
+touch "$MARCA"
