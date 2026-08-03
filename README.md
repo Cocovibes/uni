@@ -137,8 +137,8 @@ uni            plan de hoy
 uni nuevo      alta de un examen (nota + asignatura + plan + calendario)
 uni ventana    la misma ventanita, a mano
 uni proximos   siguientes 14 días
-uni sync       regenera notas + calendario + índice de materiales
-uni materiales solo reenlaza los materiales
+uni sync       regenera notas + calendario + índice del grafo
+uni indice     solo rehace los nodos curso/cuatrimestre/asignatura
 uni-drive      sincroniza con Google Drive (si lo has configurado)
 ```
 
@@ -146,14 +146,20 @@ uni-drive      sincroniza con Google Drive (si lo has configurado)
 
 Un PDF suelto en una carpeta no es nodo de nada: el grafo de Obsidian se
 dibuja con los `[[enlaces]]`, y una carpeta no es un enlace. Por eso `uni sync`
-recorre `Curso/Cuatrimestre/Asignatura/` y escribe, dentro de la nota de cada
-asignatura, un bloque con un enlace a cada material; más un `Materiales.md`
-que enlaza las asignaturas. Con eso el grafo queda:
+recorre `Curso/Cuatrimestre/Asignatura/` y convierte ese árbol en notas
+enlazadas — una por curso y una por cuatrimestre en `Cursos/`, y los archivos
+colgando de la nota de cada asignatura:
 
 ```
-Materiales → Asignatura → cada PDF
-Examen ────→ Asignatura          (por el frontmatter `asignatura:`)
+Primero ─→ Primero — Segundo Cuatrimestre ─→ CC2 ─→ tema4.pdf
+                                          ─→ FB1 ─→ …
+Segundo ─→ Segundo — Primer Cuatrimestre  ─→ (vacío hasta septiembre)
+
+Examen ──→ Asignatura        (por el frontmatter `asignatura:`)
 ```
+
+Los cuatrimestres llevan el curso en el nombre porque «Primer Cuatrimestre»
+se repite en cada año y en Obsidian los nombres de nota son únicos.
 
 Como todo lo que genera este motor, va entre marcadores
 (`MATERIALES:INICIO`/`FIN`): lo que escribas fuera se conserva.

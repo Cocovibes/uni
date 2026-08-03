@@ -6,9 +6,9 @@
 !/Exámenes/.gitkeep
 !/Asignaturas/.gitkeep
 
-# Índice de materiales: lo genera `uni sync` a partir de TUS carpetas de
-# curso, así que su contenido es tan personal como ellas.
-/Materiales.md
+# Nodos del grafo (curso y cuatrimestre): los genera `uni sync` a partir de
+# TUS carpetas de curso, así que son tan personales como ellas.
+/Cursos/
 
 # Diario, adjuntos y papelera del vault
 /Diario/

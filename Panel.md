@@ -43,9 +43,10 @@ FROM "Asignaturas"
 SORT file.name ASC
 ```
 
-Los materiales de cada una están enlazados dentro de su nota, y todos juntos
-en [[Materiales]]. Los reenlaza `uni sync`; si dejas un PDF en la carpeta de
-una asignatura, aparece solo.
+Cada curso es una nota en `Cursos/`, enlazada a sus cuatrimestres, y cada
+cuatrimestre a sus asignaturas. Los archivos cuelgan de la nota de cada
+asignatura. Lo rehace `uni sync`: si dejas un PDF en la carpeta de una
+asignatura, aparece solo.
 
 ---
 

@@ -7,8 +7,8 @@ uni.py — motor del vault. Lee las notas de Exámenes/ y Asignaturas/ y:
 
     uni ventana     ventanita de alta rápida (la abre Ctrl+Shift+Ñ)
     uni nuevo       alta de un examen: nota + asignatura + plan + calendario
-    uni sync        regenera todo (incluye el índice de materiales)
-    uni materiales  solo reenlaza los materiales de las asignaturas
+    uni sync        regenera todo (incluye el índice del grafo)
+    uni indice      solo rehace los nodos curso/cuatrimestre/asignatura
     uni hoy         plan de hoy
     uni proximos    siguientes 14 días
     uni notificar   notificación de escritorio (la lanza el timer de systemd)
@@ -445,21 +445,28 @@ def crear_examen(asignatura, titulo, fecha, dias, peso, hora, temas,
     return ruta
 
 
-# ──────────── índice de materiales (lo que llena el grafo) ─────────
-# Los PDFs de las asignaturas no son nodos de nada hasta que una nota los
-# enlaza. Esto recorre Curso/Cuatrimestre/Asignatura/ y escribe esos enlaces
-# dentro de la nota de cada asignatura, más un índice que las une.
+# ─────────────── el índice que dibuja el grafo ─────────────────────
+# Un PDF en una carpeta no es nodo de nada: el grafo se dibuja con [[enlaces]]
+# y una carpeta no es un enlace. Esto convierte el árbol de carpetas en una
+# cadena de notas enlazadas:
+#
+#     Curso → Curso — Cuatrimestre → Asignatura → cada archivo
 #
 # Solo se toca lo que hay entre los marcadores: lo que escribas fuera se queda.
 
-MAT_INICIO = "<!-- MATERIALES:INICIO — lo genera uni.py; escribe fuera del bloque -->"
-MAT_FIN = "<!-- MATERIALES:FIN -->"
+IDX_INICIO = "<!-- INDICE:INICIO — lo genera uni.py; escribe fuera del bloque -->"
+IDX_FIN = "<!-- INDICE:FIN -->"
 
-INDICE = BASE / "Materiales.md"
+DIR_CURSOS = BASE / "Cursos"
 
 # Carpetas de la raíz que son del sistema, no cursos.
 NO_CURSOS = {"Asignaturas", "Exámenes", "Ejemplos", "Plantillas", "sistema",
-             "out", "__pycache__"}
+             "out", "__pycache__", "Cursos"}
+
+# Bloques de la versión anterior, que metía todo en un «Materiales.md». Se
+# borran al regenerar para no dejar dos índices dentro de la misma nota.
+RE_LEGADO = re.compile(
+    r"\n*(?:## Materiales\n)?<!-- MATERIALES:INICIO.*?MATERIALES:FIN -->\n*", re.S)
 
 
 def cursos():
@@ -505,48 +512,50 @@ def materiales_de(carpeta):
     return ls
 
 
-def indexar_materiales():
-    """Enlaza los materiales desde las notas de asignatura y arma el índice."""
-    arbol, n_arch, n_asig = {}, 0, 0
+def escribir_indice(ruta, titulo, tipo, cuerpo, encabezado):
+    """Crea la nota del nodo si falta y le mete el bloque generado."""
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    texto = (RE_LEGADO.sub("\n\n", ruta.read_text(encoding="utf-8"))
+             if ruta.exists() else f"---\ntipo: {tipo}\n---\n\n# {titulo}\n")
+    ruta.write_text(poner_bloque(texto, IDX_INICIO, IDX_FIN, cuerpo, encabezado),
+                    encoding="utf-8")
+
+
+def indexar():
+    """Un nodo por curso, por cuatrimestre y por asignatura, encadenados."""
+    arbol = {}
     for curso, cuatri, asig, ruta in cursos():
         cuatris = arbol.setdefault(curso, {}).setdefault(cuatri, [])
-        if asig is None:                      # cuatrimestre aún vacío
-            continue
-        cuatris.append(asig)
-        n_asig += 1
+        if asig is not None:
+            cuatris.append((asig, ruta))
 
-        enlaces = materiales_de(ruta)
-        n_arch += len(enlaces)
-        nota, _ = crear_asignatura(asig)
-        cuerpo = "\n".join(enlaces) if enlaces else "*(carpeta vacía)*"
-        nota.write_text(
-            poner_bloque(nota.read_text(encoding="utf-8"),
-                         MAT_INICIO, MAT_FIN, cuerpo, "## Materiales"),
-            encoding="utf-8")
-
-    if not arbol:
-        return 0, 0
-
-    lineas = []
+    n_asig = n_arch = 0
     for curso, cuatris in arbol.items():
-        lineas.append(f"\n## {curso}")
+        escribir_indice(
+            DIR_CURSOS / f"{curso}.md", curso, "curso",
+            "\n".join(f"- [[{curso} — {c}]]" for c in cuatris)
+            or "*(sin cuatrimestres todavía)*", "## Cuatrimestres")
+
         for cuatri, asigs in cuatris.items():
-            lineas.append(f"\n### {cuatri}\n")
-            lineas += [f"- [[{a}]]" for a in asigs] or ["*(sin asignaturas todavía)*"]
-    cuerpo = "\n".join(lineas).strip()
+            escribir_indice(
+                DIR_CURSOS / f"{curso} — {cuatri}.md", f"{curso} — {cuatri}",
+                "cuatrimestre",
+                "\n".join(f"- [[{a}]]" for a, _ in asigs)
+                or "*(sin asignaturas todavía)*", "## Asignaturas")
 
-    viejo = INDICE.read_text(encoding="utf-8") if INDICE.exists() else \
-        "# Materiales\n\nÍndice de las carpetas de cada curso. Lo genera\n" \
-        "`uni sync`: si añades un PDF, aparece solo.\n"
-    INDICE.write_text(poner_bloque(viejo, MAT_INICIO, MAT_FIN, cuerpo),
-                      encoding="utf-8")
+            for asig, ruta in asigs:
+                enlaces = materiales_de(ruta)
+                n_asig, n_arch = n_asig + 1, n_arch + len(enlaces)
+                nota, _ = crear_asignatura(asig)
+                escribir_indice(nota, asig, "asignatura",
+                                "\n".join(enlaces) or "*(carpeta vacía)*",
+                                "## Archivos")
+    return len(arbol), n_asig, n_arch
 
-    return n_asig, n_arch
 
-
-def cmd_materiales():
-    n_asig, n_arch = indexar_materiales()
-    print(f"✓ {n_asig} asignaturas · {n_arch} materiales enlazados")
+def cmd_indice():
+    n_cur, n_asig, n_arch = indexar()
+    print(f"✓ {n_cur} cursos · {n_asig} asignaturas · {n_arch} archivos enlazados")
 
 
 def cmd_nuevo(argv):
@@ -623,9 +632,9 @@ def cmd_sync():
     print(f"✓ {len(ex)} exámenes · {n} sesiones · {len(sem)} bloques semanales"
           f" · {tot_hechas} tareas ya hechas conservadas")
     print(f"✓ {SALIDA}")
-    n_asig, n_arch = indexar_materiales()
-    if n_asig:
-        print(f"✓ {n_asig} asignaturas · {n_arch} materiales enlazados")
+    n_cur, n_asig, n_arch = indexar()
+    if n_cur:
+        print(f"✓ {n_cur} cursos · {n_asig} asignaturas · {n_arch} archivos enlazados")
 
 
 def cmd_hoy():
@@ -679,7 +688,7 @@ def cmd_ventana():
 
 CMDS = {"sync": cmd_sync, "hoy": cmd_hoy, "proximos": cmd_proximos,
         "notificar": cmd_notificar, "ventana": cmd_ventana,
-        "materiales": cmd_materiales}
+        "indice": cmd_indice}
 
 if __name__ == "__main__":
     a = sys.argv[1] if len(sys.argv) > 1 else "hoy"
