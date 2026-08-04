@@ -109,9 +109,20 @@ EOF
 comando() {
   head_ "Comando uni"
   mkdir -p "$HOME/.local/bin"
-  sed "s|@VAULT@|$VAULT|g" "$VAULT/sistema/uni" > "$HOME/.local/bin/uni"
+  # El calendario destino se conserva entre reinstalaciones si ya estaba, para
+  # no perderlo al volver a ejecutar el instalador sin las variables puestas.
+  local gcal="${UNI_GCAL_CALENDARIO-$(sed -n 's/^export UNI_GCAL_CALENDARIO="\(.*\)"$/\1/p' "$HOME/.local/bin/uni" 2>/dev/null)}"
+  local gcuenta="${UNI_GCAL_CUENTA-$(sed -n 's/^export UNI_GCAL_CUENTA="\(.*\)"$/\1/p' "$HOME/.local/bin/uni" 2>/dev/null)}"
+  sed -e "s|@VAULT@|$VAULT|g" -e "s|@GCAL@|$gcal|g" -e "s|@GCUENTA@|$gcuenta|g" \
+      "$VAULT/sistema/uni" > "$HOME/.local/bin/uni"
   chmod +x "$HOME/.local/bin/uni"
   ok "$HOME/.local/bin/uni"
+  if [ -n "$gcal" ]; then
+    ok "calendario destino: $gcal${gcuenta:+ ($gcuenta)}"
+  else
+    info "sin calendario destino; para añadirlo:"
+    info "  UNI_GCAL_CALENDARIO='Universidad' UNI_GCAL_CUENTA='tu@correo' ./instalar.sh comando"
+  fi
   case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *) warn "~/.local/bin no está en el PATH; añádelo a tu shell" ;;
@@ -229,6 +240,7 @@ calendario() {
 # ───────────────────────────── main ────────────────────────────────
 case "${1:-todo}" in
   plugins) requisitos; plugins ;;
+  comando) comando ;;
   atajo)   atajo ;;
   drive)   drive ;;
   todo)

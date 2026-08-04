@@ -6,5 +6,6 @@ After=graphical-session.target
 Type=oneshot
 # notify-send necesita el bus de sesión; systemd --user no lo hereda solo.
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
-ExecStart=@PY@ @VAULT@/uni.py sync
-ExecStart=@PY@ @VAULT@/uni.py notificar
+# Por el wrapper y no por uni.py directamente: ahí está el calendario destino.
+ExecStart=%h/.local/bin/uni sync
+ExecStart=%h/.local/bin/uni notificar

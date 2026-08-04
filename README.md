@@ -228,6 +228,38 @@ Si bisync se atasca (pasa si matas un ciclo a medias): `uni-drive --resync`.
 necesita archivos locales. Para eso hace falta otra cosa (Obsidian Sync, o un
 remoto git con un cliente que lo soporte).
 
+## Google Calendar (opcional)
+
+El `.ics` lo lee GNOME Calendar en local, pero eso no sale del portátil. Para
+que los exámenes lleguen a Google —y con ellos al móvil— hay un exportador que
+escribe por **Evolution Data Server**, aprovechando la cuenta de Google que ya
+tienes conectada en GNOME. No hace falta crear credenciales ni autorizar nada
+nuevo: si el calendario destino es de una cuenta conectada, EDS lo sube por
+CalDAV.
+
+```bash
+uni gcal --listar                       # qué calendarios ve el sistema
+UNI_GCAL_CALENDARIO='Universidad' UNI_GCAL_CUENTA='tu@correo' \
+  ./instalar.sh comando                 # fija el destino
+```
+
+El destino se graba dentro del propio comando `uni`, no en cada unidad de
+systemd: así lo heredan por igual la terminal, la ventanita del atajo y los
+timers. A partir de ahí cada `uni sync` lo mantiene al día. Sin destino
+configurado el exportador no hace nada.
+
+Los UID que genera `uni.py` son estables y acaban en `@uni.local`, y de ahí
+salen las tres garantías que hacen esto seguro sobre un calendario que ya usas:
+
+- reexportar **actualiza** los eventos en vez de duplicarlos;
+- un examen borrado, o una sesión que ya no toca, **desaparece** del calendario;
+- **nunca se toca un evento que no haya creado uni** — el sufijo del UID es lo
+  que distingue los nuestros del resto.
+
+Mover la fecha de un examen cambia sus UID, así que se ve como «5 nuevos y 5
+retirados» en vez de «5 actualizados». El resultado es el mismo y no quedan
+duplicados.
+
 ## Plugins
 
 Se instalan desde el repo canónico que indica el

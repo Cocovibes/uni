@@ -19,6 +19,7 @@ rellena el bloque entre RAMPA:INICIO y RAMPA:FIN, conservando lo marcado.
 
 import argparse
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -698,6 +699,7 @@ def cmd_sync():
     n_cur, n_asig, n_arch = indexar()
     if n_cur:
         print(f"✓ {n_cur} cursos · {n_asig} asignaturas · {n_arch} archivos enlazados")
+    exportar_calendario()
 
 
 def cmd_hoy():
@@ -739,6 +741,54 @@ def cmd_notificar():
                     "📚 Plan de hoy", cuerpo], check=False)
 
 
+def exportar_calendario(silencioso=False):
+    """Vuelca el .ics en el calendario del sistema, si hay uno configurado.
+
+    El destino lo fija instalar.sh dentro del comando `uni`. Sin él esto no
+    hace nada: el .ics y GNOME Calendar siguen funcionando igual.
+    """
+    destino = os.environ.get("UNI_GCAL_CALENDARIO", "").strip()
+    if not destino:
+        return
+    try:
+        import calendario                   # perezoso: necesita EDS y GTK
+        n, c, i = calendario.exportar(SALIDA, destino,
+                                      os.environ.get("UNI_GCAL_CUENTA") or None)
+        if not silencioso:
+            print(f"✓ {destino}: {n} nuevos · {c} actualizados · {i} retirados")
+    except Exception as e:                  # nunca debe tumbar el sync
+        print(f"  ! calendario «{destino}»: {e}", file=sys.stderr)
+
+
+def cmd_gcal(argv):
+    ap = argparse.ArgumentParser(
+        prog="uni gcal",
+        description="Vuelca el plan en un calendario del sistema. Si es de una "
+                    "cuenta de Google conectada en GNOME, sube a Google.")
+    ap.add_argument("calendario", nargs="?",
+                    default=os.environ.get("UNI_GCAL_CALENDARIO"),
+                    help="nombre del calendario destino")
+    ap.add_argument("-c", "--cuenta", default=os.environ.get("UNI_GCAL_CUENTA"),
+                    help="cuenta, si el nombre se repite en varias")
+    ap.add_argument("-l", "--listar", action="store_true",
+                    help="enseña los calendarios disponibles y sale")
+    a = ap.parse_args(argv)
+
+    import calendario
+    if a.listar or not a.calendario:
+        print("Calendarios del sistema:\n")
+        for nombre, cuenta in calendario.calendarios():
+            print(f"  {nombre:<38} {cuenta or ''}")
+        if not a.listar:
+            sys.exit("\n✗ dime a cuál: uni gcal \"Universidad\" -c tu@correo")
+        return
+    try:
+        n, c, i = calendario.exportar(SALIDA, a.calendario, a.cuenta)
+    except LookupError as e:
+        sys.exit(f"✗ {e}")
+    print(f"✓ {a.calendario}: {n} nuevos · {c} actualizados · {i} retirados")
+
+
 def cmd_ventana():
     """La ventanita de alta rápida. Es lo que cuelga de Ctrl+Shift+Ñ."""
     try:
@@ -757,6 +807,8 @@ if __name__ == "__main__":
     a = sys.argv[1] if len(sys.argv) > 1 else "hoy"
     if a == "nuevo":
         cmd_nuevo(sys.argv[2:])
+    elif a == "gcal":
+        cmd_gcal(sys.argv[2:])
     elif a in CMDS:
         CMDS[a]()
     else:

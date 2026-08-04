@@ -1,3 +1,11 @@
 #!/usr/bin/env bash
 # Atajo para el sistema de estudio. `uni` sin argumentos = plan de hoy.
+#
+# El calendario destino se fija aquí, al instalar, en vez de en cada unidad de
+# systemd: así lo heredan por igual la terminal, la ventanita del atajo y los
+# timers. Vacío = no se exporta a ningún calendario (el .ics y GNOME Calendar
+# funcionan igual).
+export UNI_GCAL_CALENDARIO="@GCAL@"
+export UNI_GCAL_CUENTA="@GCUENTA@"
+
 exec python3 "@VAULT@/uni.py" "$@"
