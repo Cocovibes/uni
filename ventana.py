@@ -79,18 +79,16 @@ class Alta:
         self.f_fecha = Adw.EntryRow(title="Fecha (DD/MM o AAAA-MM-DD)")
         self.f_fecha.add_suffix(self._boton_calendario())
 
+        self.f_tipo = Adw.ComboRow(title="Tipo")
+        self.f_tipo.set_model(Gtk.StringList.new(self.uni.TIPOS))
+
         self.f_dias = Adw.SpinRow.new_with_range(1, 30, 1)
         self.f_dias.set_title("Días de estudio")
         self.f_dias.set_subtitle("una sesión por día, D-N … D-1")
         self.f_dias.set_value(self.uni.DIAS_ESTUDIO_DEF)
 
-        self.f_peso = Adw.SpinRow.new_with_range(0, 100, 5)
-        self.f_peso.set_title("Peso")
-        self.f_peso.set_subtitle("% de la nota final")
-        self.f_peso.set_value(30)
-
-        for f in (self.f_asig, self.f_otra, self.f_examen, self.f_fecha,
-                  self.f_dias, self.f_peso):
+        for f in (self.f_asig, self.f_otra, self.f_examen, self.f_tipo,
+                  self.f_fecha, self.f_dias):
             grupo.add(f)
 
         mas = Adw.ExpanderRow(title="Más opciones")
@@ -101,7 +99,13 @@ class Alta:
         self.f_duracion.set_title("Duración del examen")
         self.f_duracion.set_subtitle("minutos")
         self.f_duracion.set_value(120)
-        for f in (self.f_hora, self.f_temas, self.f_duracion):
+        # Aquí abajo porque casi nunca se sabe el peso exacto, y con `dias`
+        # explícito ya no decide nada: solo manda si pones `dias: auto`.
+        self.f_peso = Adw.SpinRow.new_with_range(0, 100, 5)
+        self.f_peso.set_title("Peso")
+        self.f_peso.set_subtitle("% de la nota, si lo sabes")
+        self.f_peso.set_value(30)
+        for f in (self.f_hora, self.f_temas, self.f_duracion, self.f_peso):
             mas.add_row(f)
         grupo.add(mas)
 
@@ -170,9 +174,10 @@ class Alta:
         duracion = int(self.f_duracion.get_value())
         temas = [t.strip() for t in self.f_temas.get_text().split(",") if t.strip()]
 
+        tipo = self.uni.TIPOS[self.f_tipo.get_selected()]
         try:
             self.uni.crear_examen(asig, examen, fecha, dias, peso, hora,
-                                  temas, duracion, examen)
+                                  temas, duracion, tipo)
         except FileExistsError:
             return self._aviso(f"Ya existe «{asig} — {examen}».")
         except OSError as e:

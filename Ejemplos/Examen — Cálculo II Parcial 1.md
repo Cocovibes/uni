@@ -24,7 +24,8 @@ frontmatter de arriba es todo lo que hay: `fecha` es lo único obligatorio.
 | `tipo: examen` | Sin esto `uni.py` ignora la nota. |
 | `fecha` | `AAAA-MM-DD`. De aquí cuelga toda la rampa. |
 | `dias` | Días de estudio previos → **una sesión por día**. Def. 5. `auto` = manda el `peso`. |
-| `peso` | % de la nota final. Sale en el evento del examen; con `dias: auto`, decide la longitud. |
+| `formato` | `Parcial`, `Final`, `Recuperación` o `Test`. Se elige de una lista, no se escribe. |
+| `peso` | % de la nota final, **opcional**: casi nunca se sabe exacto. Solo decide algo con `dias: auto`. |
 | `hora` | Hora del examen. Solo para el evento del calendario. |
 | `temas` | Aparecen en la descripción de cada sesión. |
 | `duracion_examen` | Minutos. También es la duración del simulacro. |

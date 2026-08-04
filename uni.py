@@ -76,6 +76,9 @@ AUTO_OFFSETS = {"inventario": 14, "ataque": 10, "barrido": 7, "huecos": 5,
 DIAS = {"lunes": 0, "martes": 1, "miercoles": 2, "miércoles": 2, "jueves": 3,
         "viernes": 4, "sabado": 5, "sábado": 5, "domingo": 6}
 
+# Qué clase de examen es. Se elige de la lista, no se escribe.
+TIPOS = ["Parcial", "Final", "Recuperación", "Test"]
+
 
 def a_dias(v):
     """5 · '5' · '5 dias' · '1 semana' · 'auto' → 5 | 'auto'."""
@@ -304,7 +307,7 @@ def construir_ics(examenes, semanal):
         temas = ", ".join(map(str, ex["temas"])) or "—"
         ls += evento(uid(ex["asignatura"], ex["fecha"], "EXAMEN"),
                      utc(ex["fecha"], ex["hora"]), ex["duracion"],
-                     f"🎓 EXAMEN — {ex['asignatura']} ({ex['formato']}, {ex['peso']}%)",
+                     f"🎓 EXAMEN — {ex['asignatura']} ({ex['formato']})",
                      f"Temas: {temas}", 60)
         for dias, nombre, mins, tarea in plan_de(ex):
             cuando = ex["fecha"] - timedelta(days=dias)
@@ -604,6 +607,29 @@ def cmd_indice():
     print(f"✓ {n_cur} cursos · {n_asig} asignaturas · {n_arch} archivos enlazados")
 
 
+def a_tipo(v):
+    """'parcial' · 'fin' · 'REC' → el tipo entero. Basta con el principio."""
+    t = str(v).strip().lower()
+    for opcion in TIPOS:
+        if t and opcion.lower().startswith(t):
+            return opcion
+    raise argparse.ArgumentTypeError(f"tipo no entendido: {v!r} "
+                                     f"(elige entre {', '.join(TIPOS)})")
+
+
+def elegir_tipo():
+    print("\n¿Qué clase de examen es?")
+    for i, t in enumerate(TIPOS, 1):
+        print(f"  {i}. {t}")
+    while True:
+        r = input(f"\nTipo [1-{len(TIPOS)}, Enter = {TIPOS[0]}]: ").strip()
+        if not r:
+            return TIPOS[0]
+        if r.isdigit() and 1 <= int(r) <= len(TIPOS):
+            return TIPOS[int(r) - 1]
+        print("  ↑ elige un número de la lista")
+
+
 def elegir_asignatura():
     """Ofrece las del cuatrimestre en curso; escribirla es el último recurso."""
     etiqueta, asigs = asignaturas_del_cuatrimestre()
@@ -638,13 +664,14 @@ def cmd_nuevo(argv):
     ap.add_argument("-t", "--temas", default="", help="separados por comas")
     ap.add_argument("-m", "--duracion", type=int, default=120,
                     help="minutos de examen (def. 120)")
-    ap.add_argument("-f", "--formato", default=None,
-                    help="parcial, final… (def. el título)")
+    ap.add_argument("-f", "--tipo", type=a_tipo, default=None,
+                    help=f"{' · '.join(TIPOS)} (basta el principio: -f fin)")
     a = ap.parse_args(argv)
 
     pide = not (a.asignatura and a.titulo and a.fecha)
     asignatura = a.asignatura or elegir_asignatura()
     titulo = a.titulo or input("Examen (p. ej. Parcial 2): ").strip()
+    tipo = a.tipo or (elegir_tipo() if pide else TIPOS[0])
     fecha_txt = a.fecha or input("Fecha (AAAA-MM-DD o DD/MM): ").strip()
     dias_txt = a.dias
     if pide and dias_txt is None:
@@ -665,7 +692,7 @@ def cmd_nuevo(argv):
     try:
         ruta = crear_examen(asignatura, titulo, fecha, dias, a.peso, hora,
                             [t.strip() for t in a.temas.split(",") if t.strip()],
-                            a.duracion, a.formato or titulo)
+                            a.duracion, tipo)
     except FileExistsError as e:
         sys.exit(f"✗ ya existe {Path(e.args[0]).name} — edítala o usa otro título.")
     ruta_as, nueva = crear_asignatura(asignatura)

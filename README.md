@@ -47,12 +47,17 @@ uni nuevo "Física Básica 1" Final 2026-06-10 --dias "1 semana" \
 
 | Opción | Para qué | Def. |
 |--------|----------|------|
+| `--tipo` | `Parcial` · `Final` · `Recuperación` · `Test`. Basta el principio: `-f fin` | Parcial |
 | `--dias` | días de estudio previos. Vale `5`, `"1 semana"`, `auto` | **5** |
-| `--peso` | % de la nota final | 30 |
 | `--hora` | hora del examen | 09:00 |
 | `--temas` | separados por comas | — |
 | `--duracion` | minutos de examen | 120 |
-| `--formato` | parcial, final… | el título |
+| `--peso` | % de la nota final, si lo sabes | 30 |
+
+El **tipo** se elige de una lista, nunca se escribe. El **peso** vive en «Más
+opciones» a propósito: rara vez se sabe el porcentaje exacto de un examen, no
+sale en el título del evento y con `dias` explícito no decide nada — solo manda
+si pones `dias: auto`.
 
 La fecha admite `AAAA-MM-DD` y `DD/MM` (sin año = la próxima vez que ocurra).
 
