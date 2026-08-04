@@ -1,0 +1,16 @@
+[Unit]
+Description=Vigila Exámenes/ y regenera el plan en cuanto cambie
+
+[Path]
+# PathChanged sobre un DIRECTORIO salta cuando se crea o se borra algo dentro,
+# que es justo lo que hay que recoger al vuelo: una nota de examen nueva o una
+# que mandas a la papelera desde Obsidian. Editar el contenido de una nota que
+# ya existe no cambia el directorio y no dispara esto — para eso ya está el
+# sync de cada 15 min.
+#
+# Tampoco hay bucle: `uni sync` reescribe la rampa DENTRO de las notas, no crea
+# ni borra ficheros en Exámenes/.
+PathChanged=@VAULT@/Exámenes
+
+[Install]
+WantedBy=paths.target

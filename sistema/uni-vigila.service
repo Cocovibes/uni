@@ -1,0 +1,7 @@
+[Unit]
+Description=Regenera el plan tras un cambio en Exámenes/
+
+[Service]
+Type=oneshot
+# Por el wrapper: ahí está el calendario destino.
+ExecStart=%h/.local/bin/uni sync

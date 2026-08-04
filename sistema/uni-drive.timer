@@ -2,9 +2,12 @@
 Description=Sincroniza el vault con Google Drive cada 15 min
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=15min
-# Si el portátil estaba apagado, sincroniza al encender.
+# En el reloj, no monotónico. Con OnBootSec=/OnUnitActiveSec= el timer se
+# queda «active (elapsed)» y sin próxima ejecución si se reinicia la unidad
+# cuando ambos disparadores ya han vencido — y Persistent= NO lo arregla,
+# porque solo tiene efecto sobre OnCalendar=.
+OnCalendar=*:0/15
+# Ahora sí: si el portátil estaba apagado, se pone al día al encender.
 Persistent=true
 AccuracySec=1min
 

@@ -133,6 +133,8 @@ Sin sudo. El instalador es idempotente y hace:
   (`./instalar.sh atajo` para solo eso; `UNI_ATAJO='<Control><Shift>e'` para
   cambiar la tecla);
 - activa el timer de usuario de systemd para el aviso de las 08:30;
+- activa un `.path` que vigila `Exámenes/`: crear o borrar una nota se procesa
+  en segundos, sin esperar al siguiente sync;
 - si rclone ya está configurado, activa el timer de sincronización con Drive;
 - enlaza el `.ics` con GNOME Calendar vía Evolution Data Server;
 - si Obsidian es flatpak, le da acceso a la carpeta del vault.
@@ -313,6 +315,11 @@ exámenes de nadie.
 
 ## Detalles que costaron encontrar
 
+- `Persistent=true` **solo tiene efecto sobre `OnCalendar=`**. Un timer con
+  `OnBootSec=`/`OnUnitActiveSec=` que se reinicie cuando ambos disparadores ya
+  han vencido se queda en `active (elapsed)` con `Trigger: n/a` — activo, pero
+  sin próxima ejecución y sin volver a dispararse nunca. Por eso el timer de
+  Drive es `OnCalendar=*:0/15`.
 - La fuente de EDS necesita la sección **`[Local Backend]`, con espacio**. Con
   `[Local]` se ignora en silencio y GNOME se crea un calendario vacío propio.
 - `CustomFile` es un `GFile`: exige URI `file://`, no una ruta pelada.

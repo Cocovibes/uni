@@ -143,6 +143,20 @@ aviso() {
   info "pararlo: systemctl --user disable --now uni-hoy.timer"
 }
 
+# ───────── regenerar al vuelo cuando cambia Exámenes/ ──────────────
+# Sin esto, borrar una nota en Obsidian no se nota hasta el siguiente sync, y
+# el examen sigue en el calendario hasta 15 minutos después.
+vigilante() {
+  head_ "Vigilante de Exámenes/"
+  command -v systemctl >/dev/null || { warn "Sin systemd; me lo salto."; return 0; }
+  d="$HOME/.config/systemd/user"; mkdir -p "$d"
+  sed "s|@VAULT@|$VAULT|g" "$VAULT/sistema/uni-vigila.path" > "$d/uni-vigila.path"
+  cp "$VAULT/sistema/uni-vigila.service" "$d/uni-vigila.service"
+  systemctl --user daemon-reload
+  systemctl --user enable --now uni-vigila.path
+  ok "uni-vigila.path activo — un examen nuevo o borrado se procesa al momento"
+}
+
 # ───────────── atajo de teclado (GNOME custom keybinding) ──────────
 # Ctrl+Shift+Ñ abre la ventanita de alta rápida. La ñ es el keysym 'ntilde'.
 # Idempotente: reutiliza la entrada 'uni-nuevo' si ya está en la lista, y
@@ -243,8 +257,9 @@ case "${1:-todo}" in
   comando) comando ;;
   atajo)   atajo ;;
   drive)   drive ;;
+  vigilante) vigilante ;;
   todo)
-    requisitos; plugins; comando; aviso; atajo; drive; calendario
+    requisitos; plugins; comando; aviso; vigilante; atajo; drive; calendario
     head_ "Primer sync"
     mkdir -p "$VAULT/Exámenes" "$VAULT/Asignaturas"
     "$PY" "$VAULT/uni.py" sync
