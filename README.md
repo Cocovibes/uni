@@ -52,7 +52,8 @@ uni nuevo "Física Básica 1" Final 2026-06-10 --dias "1 semana" \
 | `--hora` | hora del examen | 09:00 |
 | `--temas` | separados por comas | — |
 | `--duracion` | minutos de examen | 120 |
-| `--peso` | % de la nota final, si lo sabes | 30 |
+| `--peso` | % de la nota final | 30 |
+| `--entrega` | es un trabajo, no un examen | — |
 
 El **tipo** se elige de una lista, nunca se escribe. El **peso** vive en «Más
 opciones» a propósito: rara vez se sabe el porcentaje exacto de un examen, no
@@ -81,31 +82,32 @@ duracion_examen: 120
 
 Recordar "estudia 5 días antes" no sirve de nada si el día 5 no sabes qué hacer.
 `dias: N` genera **N sesiones, una por día**, en los N días naturales anteriores
-al examen (D-N … D-1), y cada una tiene una acción concreta:
+al examen (D-N … D-1). Todas se llaman **Estudio**: lo que cambia entre ellas es
+qué hacer, y eso va en la descripción, no en el título.
 
-| Sesión                  | Para qué |
-|-------------------------|----------|
-| Inventario              | Medir qué sabes. Bajar exámenes de otros años. |
-| Ataque a lo peor        | Los 2 temas más flojos, con apuntes. |
-| Barrido a libro cerrado | **El diagnóstico.** 1 problema por tema, cronometrado, sin apuntes. |
-| Huecos                  | Solo lo que falló en el barrido. |
-| Simulacro               | Examen entero de otro año, condiciones reales. |
-| Corrección              | Solo los errores del simulacro → a *Trampas*. |
-| Formulario de memoria   | Escribirlo en un folio de cero. Dormir 8 h. |
+| Sesión | Qué toca |
+|--------|----------|
+| 1ª | Medir qué sabes. Bajar exámenes de otros años. |
+| 2ª | Los 2 temas más flojos, con apuntes. |
+| 3ª | **El diagnóstico.** 1 problema por tema, cronometrado, sin apuntes. |
+| 4ª | Repasar solo lo que falló. |
+| 5ª | Examen entero de otro año, condiciones reales. |
+| 6ª | Corregirlo, y los errores → a *Trampas*. |
+| 7ª | El formulario de memoria en un folio, de cero. Dormir 8 h. |
 
 Con menos días que sesiones se caen las menos rentables primero, **respetando
-las dependencias** (Huecos nunca entra sin Barrido; Corrección nunca sin
-Simulacro):
+las dependencias**: no se repasan huecos sin haber hecho antes el diagnóstico,
+ni se corrige un simulacro que no se ha hecho.
 
 | `dias` | Plan |
 |--------|------|
-| 1 | Formulario |
-| 2 | Simulacro · Formulario |
-| 3 | Barrido · Simulacro · Formulario |
-| 4 | Barrido · Simulacro · Corrección · Formulario |
-| **5** *(def.)* | Barrido · Huecos · Simulacro · Corrección · Formulario |
+| 1 | formulario de memoria |
+| 2 | simulacro · formulario |
+| 3 | diagnóstico · simulacro · formulario |
+| 4 | diagnóstico · simulacro · corrección · formulario |
+| **5** *(def.)* | diagnóstico · huecos · simulacro · corrección · formulario |
 | 7 | la rampa entera, un día cada una |
-| >7 | la rampa entera + *Estudio de fondo* en los días de delante |
+| >7 | la rampa entera + temario de fondo en los días de delante |
 
 Si el examen está **más cerca** que la ventana pedida, el plan se encoge a los
 días que quedan en vez de generar sesiones ya pasadas.
@@ -115,8 +117,15 @@ reparten con hueco entre ellas: **≥ 35 %** → D-14,10,7,5,3,2,1 · **15-34 %*
 D-10,7,5,3,1 · **< 15 %** → D-5,3,1.
 
 Marcar `[x]` es seguro: `uni sync` conserva lo hecho **aunque muevas la fecha
-del examen o cambies `dias`** — lo hecho se guarda por nombre de sesión, no por
-el número de día.
+del examen o cambies `dias`**. Se guarda por número de día (`D-3`), que con
+sesiones idénticas es lo único que las distingue.
+
+## Entregas
+
+Lo mismo vale para un trabajo: en la ventana, el selector de arriba cambia de
+**Examen** a **Entrega**; en la terminal, `uni nuevo -e`. La rampa funciona
+igual, el evento sale como `📦 ENTREGA — Asignatura (Práctica 3)` y el tipo
+(Parcial/Final) desaparece, que a una entrega no le pega.
 
 Aparte de la rampa, las notas de `Asignaturas/` pueden llevar un bloque
 `semanal` que crea un evento recurrente. Esa hora fija es la que de verdad

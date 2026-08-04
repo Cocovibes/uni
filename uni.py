@@ -43,30 +43,36 @@ FIN = "<!-- RAMPA:FIN -->"
 # Cuántos días de estudio se planifican si la nota no dice otra cosa.
 DIAS_ESTUDIO_DEF = 5
 
-# Las sesiones, en orden pedagógico. (clave, nombre, minutos, qué hacer, prioridad)
+# Todas las sesiones se llaman igual en el calendario y en las tareas. Lo que
+# cambia entre ellas es QUÉ hacer, y eso va en la descripción, no en el título.
+NOMBRE = "Estudio"
+
+# Las sesiones, en orden pedagógico. (clave, minutos, qué hacer, prioridad)
 #
 # La prioridad decide cuáles sobreviven cuando hay menos días que sesiones:
-# la 1 no se cae nunca. Las dependencias se respetan solas — "Huecos" (5) solo
-# entra si ya entró "Barrido" (3), y "Corrección" (4) si entró "Simulacro" (2).
+# la 1 no se cae nunca. Las dependencias se respetan solas — los huecos (5)
+# solo entran si ya entró el barrido (3), y la corrección (4) si entró el
+# simulacro (2).
 SESIONES = [
-    ("inventario", "Inventario", 30,
+    ("inventario", 30,
      "listar temas, puntuar confianza 0-3, bajar exámenes de otros años", 7),
-    ("ataque", "Ataque a lo peor", 90,
+    ("ataque", 90,
      "los 2 temas más flojos, 3 problemas de cada uno, con apuntes", 6),
-    ("barrido", "Barrido a libro cerrado", 90,
+    ("barrido", 90,
      "1 problema de CADA tema, cronometrado, sin apuntes — es el diagnóstico", 3),
-    ("huecos", "Huecos", 90,
-     "solo lo que falló en el barrido, hasta que salga sin mirar", 5),
-    ("simulacro", "Simulacro", None,
+    ("huecos", 90,
+     "repasar solo lo que falló el día anterior, hasta que salga sin mirar", 5),
+    ("simulacro", None,
      "examen entero de otro año, condiciones reales, sin corregir hoy", 2),
-    ("correccion", "Corrección", 60,
-     "corregir el simulacro, repasar solo los errores, anotarlos en Trampas", 4),
-    ("formulario", "Formulario de memoria", 45,
+    ("correccion", 60,
+     "corregir el examen del día anterior, repasar solo los errores y "
+     "anotarlos en Trampas", 4),
+    ("formulario", 45,
      "escribir el formulario de memoria en un folio, comparar, dormir 8h", 1),
 ]
 
 # Con más días que sesiones, los de delante se llenan con temario de fondo.
-FONDO = ("fondo", "Estudio de fondo", 60,
+FONDO = ("fondo", 60,
          "temario por bloques con apuntes: leer, resumir y 2 problemas de cada uno")
 
 # Offsets del modo 'auto' (dias: auto) — la rampa clásica, escalada por peso.
@@ -78,6 +84,11 @@ DIAS = {"lunes": 0, "martes": 1, "miercoles": 2, "miércoles": 2, "jueves": 3,
 
 # Qué clase de examen es. Se elige de la lista, no se escribe.
 TIPOS = ["Parcial", "Final", "Recuperación", "Test"]
+
+# Un examen se aprueba; una entrega se entrega. La rampa sirve para los dos,
+# pero el evento no se llama igual y a una entrega no le pega un «Parcial».
+CLASES = ["examen", "entrega"]
+ICONO = {"examen": "🎓 EXAMEN", "entrega": "📦 ENTREGA"}
 
 
 def a_dias(v):
@@ -104,12 +115,9 @@ def a_dias(v):
 def sesiones_para(n):
     """Exactamente n sesiones, una por día, en orden pedagógico."""
     if n >= len(SESIONES):
-        extra = n - len(SESIONES)
-        fondo = [(FONDO[0], f"{FONDO[1]} ({i + 1}/{extra})", FONDO[2], FONDO[3])
-                 for i in range(extra)]
-        return fondo + [s[:4] for s in SESIONES]
-    elegidas = sorted(SESIONES, key=lambda s: s[4])[:n]
-    return [s[:4] for s in SESIONES if s in elegidas]
+        return [FONDO[:3]] * (n - len(SESIONES)) + [s[:3] for s in SESIONES]
+    elegidas = sorted(SESIONES, key=lambda s: s[3])[:n]
+    return [s[:3] for s in SESIONES if s in elegidas]
 
 
 def rampa_por_peso(peso):
@@ -120,7 +128,7 @@ def rampa_por_peso(peso):
         claves = {"ataque", "barrido", "huecos", "simulacro", "formulario"}
     else:
         claves = {"huecos", "simulacro", "formulario"}
-    return [s[:4] for s in SESIONES if s[0] in claves]
+    return [s[:3] for s in SESIONES if s[0] in claves]
 
 
 def plan_de(ex):
@@ -131,16 +139,16 @@ def plan_de(ex):
     encoge a los días que quedan en vez de generar sesiones ya pasadas.
     """
     if ex["dias"] == "auto":
-        return [(AUTO_OFFSETS[c], nom, mins, t)
-                for c, nom, mins, t in rampa_por_peso(ex["peso"])]
+        return [(AUTO_OFFSETS[c], NOMBRE, mins, t)
+                for c, mins, t in rampa_por_peso(ex["peso"])]
     n = ex["dias"]
     quedan = (ex["fecha"] - date.today()).days
     if 0 < quedan < n:
         n = quedan
     if n < 1:
         return []
-    return [(n - i, nom, mins, t)
-            for i, (_c, nom, mins, t) in enumerate(sesiones_para(n))]
+    return [(n - i, NOMBRE, mins, t)
+            for i, (_c, mins, t) in enumerate(sesiones_para(n))]
 
 
 # ───────────────────────── leer las notas ──────────────────────────
@@ -181,11 +189,14 @@ def leer_examenes():
         return out
     for p in sorted(DIR_EX.glob("*.md")):
         fm, cuerpo = frontmatter(p.read_text(encoding="utf-8"))
-        if not fm or fm.get("tipo") != "examen":
+        if not fm or fm.get("tipo") not in CLASES:
             continue
         try:
             out.append({
                 "ruta": p, "cuerpo": cuerpo,
+                "clase": fm["tipo"],
+                # Las notas viejas no llevan `titulo`; sale del nombre del fichero.
+                "titulo": fm.get("titulo") or p.stem.split(" — ", 1)[-1],
                 "asignatura": limpiar_enlace(fm.get("asignatura", p.stem)),
                 "fecha": a_fecha(fm["fecha"]),
                 "hora": str(fm.get("hora", "09:00")),
@@ -223,10 +234,10 @@ def leer_semanal():
 
 # ──────────────── escribir la rampa dentro de la nota ──────────────
 
-# Se guarda por NOMBRE de sesión, no por D-N: con 'dias' variable los offsets
-# se mueven, y lo hecho debe sobrevivir tanto a cambiar la fecha del examen
-# como a cambiar la ventana de estudio.
-RE_TAREA = re.compile(r"^- \[(.)\] D-\d+ · ([^—]+) —")
+# Se guarda por D-N. Antes se guardaba por nombre de sesión, pero ahora todas
+# se llaman «Estudio»: marcar una marcaría las cinco. Y con sesiones idénticas
+# el día es justo lo que las distingue, así que la clave correcta es el número.
+RE_TAREA = re.compile(r"^- \[(.)\] D-(\d+) ")
 
 
 def inyectar_rampa(ex):
@@ -239,12 +250,12 @@ def inyectar_rampa(ex):
         for linea in bloque.group(1).splitlines():
             m = RE_TAREA.match(linea.strip())
             if m and m.group(1).lower() == "x":
-                hechas.add(m.group(2).strip())
+                hechas.add(int(m.group(2)))
 
     lineas = []
     for dias, nombre, mins, tarea in plan_de(ex):
         cuando = ex["fecha"] - timedelta(days=dias)
-        marca = "x" if nombre in hechas else " "
+        marca = "x" if dias in hechas else " "
         dur = mins or ex["duracion"]
         lineas.append(f"- [{marca}] D-{dias} · {nombre} — {tarea} "
                       f"({dur} min) 📅 {cuando.isoformat()}")
@@ -305,9 +316,10 @@ def construir_ics(examenes, semanal):
     n = 0
     for ex in examenes:
         temas = ", ".join(map(str, ex["temas"])) or "—"
+        cola = ex["titulo"] if ex["clase"] == "entrega" else ex["formato"]
         ls += evento(uid(ex["asignatura"], ex["fecha"], "EXAMEN"),
                      utc(ex["fecha"], ex["hora"]), ex["duracion"],
-                     f"🎓 EXAMEN — {ex['asignatura']} ({ex['formato']})",
+                     f"{ICONO[ex['clase']]} — {ex['asignatura']} ({cola})",
                      f"Temas: {temas}", 60)
         for dias, nombre, mins, tarea in plan_de(ex):
             cuando = ex["fecha"] - timedelta(days=dias)
@@ -344,8 +356,9 @@ def agenda(examenes, desde, hasta):
                 out.append((cuando, dias, ex["asignatura"], nombre,
                             mins or ex["duracion"], tarea))
         if desde <= ex["fecha"] <= hasta:
-            out.append((ex["fecha"], 0, ex["asignatura"], "🎓 EXAMEN",
-                        ex["duracion"], "Suerte."))
+            out.append((ex["fecha"], 0, ex["asignatura"], ICONO[ex["clase"]],
+                        ex["duracion"],
+                        "A entregar." if ex["clase"] == "entrega" else "Suerte."))
     return sorted(out)
 
 
@@ -426,7 +439,7 @@ def crear_asignatura(nombre):
 
 
 def crear_examen(asignatura, titulo, fecha, dias, peso, hora, temas,
-                 duracion, formato):
+                 duracion, formato, clase="examen"):
     ruta = DIR_EX / f"{nombre_nota(f'{asignatura} — {titulo}')}.md"
     if ruta.exists():
         raise FileExistsError(ruta)
@@ -434,7 +447,8 @@ def crear_examen(asignatura, titulo, fecha, dias, peso, hora, temas,
     ruta.parent.mkdir(parents=True, exist_ok=True)
     ruta.write_text(
         "---\n"
-        "tipo: examen\n"
+        f"tipo: {clase}\n"
+        f"titulo: {titulo}\n"
         f'asignatura: "[[{asignatura}]]"\n'
         f"fecha: {fecha.isoformat()}\n"
         f'hora: "{hora}"\n'
@@ -617,6 +631,19 @@ def a_tipo(v):
                                      f"(elige entre {', '.join(TIPOS)})")
 
 
+def elegir_clase():
+    print("\n¿Qué das de alta?")
+    for i, c in enumerate(CLASES, 1):
+        print(f"  {i}. {c.capitalize()}")
+    while True:
+        r = input(f"\n[1-{len(CLASES)}, Enter = examen]: ").strip()
+        if not r:
+            return CLASES[0]
+        if r.isdigit() and 1 <= int(r) <= len(CLASES):
+            return CLASES[int(r) - 1]
+        print("  ↑ elige un número de la lista")
+
+
 def elegir_tipo():
     print("\n¿Qué clase de examen es?")
     for i, t in enumerate(TIPOS, 1):
@@ -666,12 +693,19 @@ def cmd_nuevo(argv):
                     help="minutos de examen (def. 120)")
     ap.add_argument("-f", "--tipo", type=a_tipo, default=None,
                     help=f"{' · '.join(TIPOS)} (basta el principio: -f fin)")
+    ap.add_argument("-e", "--entrega", action="store_true",
+                    help="es una entrega o trabajo, no un examen")
     a = ap.parse_args(argv)
 
     pide = not (a.asignatura and a.titulo and a.fecha)
+    clase = "entrega" if a.entrega else (elegir_clase() if pide else "examen")
     asignatura = a.asignatura or elegir_asignatura()
-    titulo = a.titulo or input("Examen (p. ej. Parcial 2): ").strip()
-    tipo = a.tipo or (elegir_tipo() if pide else TIPOS[0])
+    titulo = a.titulo or input(
+        "Entrega (p. ej. Práctica 3): " if clase == "entrega"
+        else "Examen (p. ej. Parcial 2): ").strip()
+    # A una entrega no le pega un «Parcial»: el formato solo aplica a exámenes.
+    tipo = "Entrega" if clase == "entrega" else (
+        a.tipo or (elegir_tipo() if pide else TIPOS[0]))
     fecha_txt = a.fecha or input("Fecha (AAAA-MM-DD o DD/MM): ").strip()
     dias_txt = a.dias
     if pide and dias_txt is None:
@@ -692,7 +726,7 @@ def cmd_nuevo(argv):
     try:
         ruta = crear_examen(asignatura, titulo, fecha, dias, a.peso, hora,
                             [t.strip() for t in a.temas.split(",") if t.strip()],
-                            a.duracion, tipo)
+                            a.duracion, tipo, clase)
     except FileExistsError as e:
         sys.exit(f"✗ ya existe {Path(e.args[0]).name} — edítala o usa otro título.")
     ruta_as, nueva = crear_asignatura(asignatura)

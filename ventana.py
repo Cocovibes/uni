@@ -63,6 +63,13 @@ class Alta:
     def _formulario(self):
         grupo = Adw.PreferencesGroup()
 
+        # Lo primero: qué se está dando de alta. Cambia el nombre del evento y
+        # decide si el tipo (Parcial/Final…) pinta algo.
+        self.f_clase = Adw.ComboRow(title="Qué es")
+        self.f_clase.set_model(
+            Gtk.StringList.new([c.capitalize() for c in self.uni.CLASES]))
+        self.f_clase.connect("notify::selected", self._cambia_clase)
+
         # La asignatura se elige, no se escribe: las del cuatrimestre en curso
         # salen del calendario y de las carpetas, así que al cambiar de
         # cuatrimestre la lista cambia sola.
@@ -87,8 +94,8 @@ class Alta:
         self.f_dias.set_subtitle("una sesión por día, D-N … D-1")
         self.f_dias.set_value(self.uni.DIAS_ESTUDIO_DEF)
 
-        for f in (self.f_asig, self.f_otra, self.f_examen, self.f_tipo,
-                  self.f_fecha, self.f_dias):
+        for f in (self.f_clase, self.f_asig, self.f_otra, self.f_examen,
+                  self.f_tipo, self.f_fecha, self.f_dias):
             grupo.add(f)
 
         mas = Adw.ExpanderRow(title="Más opciones")
@@ -103,7 +110,7 @@ class Alta:
         # explícito ya no decide nada: solo manda si pones `dias: auto`.
         self.f_peso = Adw.SpinRow.new_with_range(0, 100, 5)
         self.f_peso.set_title("Peso")
-        self.f_peso.set_subtitle("% de la nota, si lo sabes")
+        self.f_peso.set_subtitle("% de la nota")
         self.f_peso.set_value(30)
         for f in (self.f_hora, self.f_temas, self.f_duracion, self.f_peso):
             mas.add_row(f)
@@ -116,6 +123,17 @@ class Alta:
                   self.f_hora, self.f_temas):
             f.connect("entry-activated", lambda *_: self.guardar())
         (self.f_otra if self.f_otra.get_visible() else self.f_examen).grab_focus()
+
+    def clase(self):
+        return self.uni.CLASES[self.f_clase.get_selected()]
+
+    def _cambia_clase(self, *_):
+        """Una entrega no tiene Parcial/Final, y el campo del nombre cambia."""
+        entrega = self.clase() == "entrega"
+        self.f_tipo.set_visible(not entrega)
+        self.f_examen.set_title("Entrega (p. ej. Práctica 3)" if entrega
+                                else "Examen (p. ej. Parcial 2)")
+        self.win.set_title("Entrega nueva" if entrega else "Examen nuevo")
 
     def _cambia_asignatura(self, *_):
         """El campo libre solo aparece si has elegido «Otra…»."""
@@ -174,10 +192,12 @@ class Alta:
         duracion = int(self.f_duracion.get_value())
         temas = [t.strip() for t in self.f_temas.get_text().split(",") if t.strip()]
 
-        tipo = self.uni.TIPOS[self.f_tipo.get_selected()]
+        clase = self.clase()
+        tipo = ("Entrega" if clase == "entrega"
+                else self.uni.TIPOS[self.f_tipo.get_selected()])
         try:
             self.uni.crear_examen(asig, examen, fecha, dias, peso, hora,
-                                  temas, duracion, tipo)
+                                  temas, duracion, tipo, clase)
         except FileExistsError:
             return self._aviso(f"Ya existe «{asig} — {examen}».")
         except OSError as e:
