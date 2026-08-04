@@ -19,6 +19,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, Gtk  # noqa: E402
 
 APP_ID = "org.uni.AltaExamen"
+OTRA = "Otra…"
 
 
 class Alta:
@@ -62,7 +63,18 @@ class Alta:
     def _formulario(self):
         grupo = Adw.PreferencesGroup()
 
-        self.f_asig = Adw.EntryRow(title="Asignatura")
+        # La asignatura se elige, no se escribe: las del cuatrimestre en curso
+        # salen del calendario y de las carpetas, así que al cambiar de
+        # cuatrimestre la lista cambia sola.
+        etiqueta, self.asigs = self.uni.asignaturas_del_cuatrimestre()
+        self.f_asig = Adw.ComboRow(title="Asignatura")
+        self.f_asig.set_subtitle(etiqueta or "sin cuatrimestre en curso")
+        self.f_asig.set_model(Gtk.StringList.new(self.asigs + [OTRA]))
+        self.f_asig.connect("notify::selected", self._cambia_asignatura)
+
+        # Solo se muestra si eliges «Otra…».
+        self.f_otra = Adw.EntryRow(title="¿Cuál?", visible=not self.asigs)
+
         self.f_examen = Adw.EntryRow(title="Examen (p. ej. Parcial 2)")
         self.f_fecha = Adw.EntryRow(title="Fecha (DD/MM o AAAA-MM-DD)")
         self.f_fecha.add_suffix(self._boton_calendario())
@@ -77,7 +89,7 @@ class Alta:
         self.f_peso.set_subtitle("% de la nota final")
         self.f_peso.set_value(30)
 
-        for f in (self.f_asig, self.f_examen, self.f_fecha,
+        for f in (self.f_asig, self.f_otra, self.f_examen, self.f_fecha,
                   self.f_dias, self.f_peso):
             grupo.add(f)
 
@@ -95,30 +107,24 @@ class Alta:
 
         self.caja.append(grupo)
 
-        rapidas = self._asignaturas_rapidas()
-        if rapidas:
-            self.caja.append(rapidas)
-
         # Enter en cualquier campo = Guardar.
-        for f in (self.f_asig, self.f_examen, self.f_fecha,
+        for f in (self.f_otra, self.f_examen, self.f_fecha,
                   self.f_hora, self.f_temas):
             f.connect("entry-activated", lambda *_: self.guardar())
-        self.f_asig.grab_focus()
+        (self.f_otra if self.f_otra.get_visible() else self.f_examen).grab_focus()
 
-    def _asignaturas_rapidas(self):
-        """Las asignaturas que ya existen, a un clic. La mayoría son repetidas."""
-        nombres = sorted(p.stem for p in self.uni.DIR_AS.glob("*.md"))
-        if not nombres:
+    def _cambia_asignatura(self, *_):
+        """El campo libre solo aparece si has elegido «Otra…»."""
+        self.f_otra.set_visible(self.asignatura() is None)
+        if self.f_otra.get_visible():
+            self.f_otra.grab_focus()
+
+    def asignatura(self):
+        """La elegida en el desplegable, o None si toca escribirla."""
+        if not self.asigs:
             return None
-        caja = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
-                           max_children_per_line=3,
-                           column_spacing=6, row_spacing=6)
-        for n in nombres:
-            b = Gtk.Button(label=n)
-            b.add_css_class("pill")
-            b.connect("clicked", lambda _b, n=n: self.f_asig.set_text(n))
-            caja.append(b)
-        return caja
+        sel = self.f_asig.get_selected()
+        return None if sel >= len(self.asigs) else self.asigs[sel]
 
     def _boton_calendario(self):
         cal = Gtk.Calendar()
@@ -146,7 +152,7 @@ class Alta:
     # ─────────────────────────── guardar ───────────────────────────
 
     def guardar(self):
-        asig = self.f_asig.get_text().strip()
+        asig = self.asignatura() or self.f_otra.get_text().strip()
         examen = self.f_examen.get_text().strip()
         fecha_txt = self.f_fecha.get_text().strip()
         if not (asig and examen and fecha_txt):

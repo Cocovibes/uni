@@ -349,6 +349,11 @@ def agenda(examenes, desde, hasta):
 
 RE_INVALIDO = re.compile(r'[\\/:*?"<>|]')
 
+
+def nombre_nota(x):
+    """Obsidian no admite \\ / : * ? " < > | en el nombre de una nota."""
+    return RE_INVALIDO.sub("-", x).strip()
+
 PLANTILLA_ASIGNATURA = """---
 nombre: {nombre}
 ---
@@ -408,7 +413,7 @@ def a_hora(t):
 
 def crear_asignatura(nombre):
     """Crea Asignaturas/<nombre>.md si falta, para que el [[enlace]] resuelva."""
-    ruta = DIR_AS / f"{RE_INVALIDO.sub('-', nombre)}.md"
+    ruta = DIR_AS / f"{nombre_nota(nombre)}.md"
     if ruta.exists():
         return ruta, False
     ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -418,7 +423,7 @@ def crear_asignatura(nombre):
 
 def crear_examen(asignatura, titulo, fecha, dias, peso, hora, temas,
                  duracion, formato):
-    ruta = DIR_EX / f"{RE_INVALIDO.sub('-', f'{asignatura} — {titulo}').strip()}.md"
+    ruta = DIR_EX / f"{nombre_nota(f'{asignatura} — {titulo}')}.md"
     if ruta.exists():
         raise FileExistsError(ruta)
     bloque = ("\n" + "\n".join(f"  - {t}" for t in temas)) if temas else " []"
@@ -512,6 +517,41 @@ def materiales_de(carpeta):
     return ls
 
 
+# Para saber cuál es el curso «actual» cuando dos tienen el mismo cuatrimestre:
+# gana el más avanzado. Los que no estén aquí van al final.
+ORDEN_CURSOS = ["Primero", "Segundo", "Tercero", "Cuarto", "Quinto", "Sexto"]
+
+
+def periodo(hoy):
+    """'segundo' de febrero a junio; 'primer' el resto (en verano, el que viene)."""
+    return "segundo" if 2 <= hoy.month <= 6 else "primer"
+
+
+def cuatrimestre_actual(hoy=None):
+    """(curso, cuatrimestre) del periodo en curso, o None si no hay carpeta.
+
+    Sale del calendario y de las carpetas que existan, así que al cambiar de
+    cuatrimestre se actualiza solo: no hay nada que tocar a mano.
+    """
+    hoy = hoy or date.today()
+    busco = periodo(hoy)
+    vistos = {(c, q) for c, q, _a, _r in cursos() if busco in q.lower()}
+    if not vistos:
+        return None
+    orden = {n: i for i, n in enumerate(ORDEN_CURSOS)}
+    return max(vistos, key=lambda cq: (orden.get(cq[0], len(orden)), cq[0]))
+
+
+def asignaturas_del_cuatrimestre(hoy=None):
+    """(etiqueta, [asignaturas]) del cuatrimestre en curso."""
+    act = cuatrimestre_actual(hoy)
+    if not act:
+        return None, []
+    curso, cuatri = act
+    return (f"{curso} · {cuatri}",
+            [a for c, q, a, _r in cursos() if (c, q) == act and a])
+
+
 def escribir_indice(ruta, titulo, tipo, cuerpo, encabezado):
     """Crea la nota del nodo si falta y le mete el bloque generado."""
     ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -531,18 +571,10 @@ def indexar():
 
     n_asig = n_arch = 0
     for curso, cuatris in arbol.items():
-        escribir_indice(
-            DIR_CURSOS / f"{curso}.md", curso, "curso",
-            "\n".join(f"- [[{curso} — {c}]]" for c in cuatris)
-            or "*(sin cuatrimestres todavía)*", "## Cuatrimestres")
-
         for cuatri, asigs in cuatris.items():
-            escribir_indice(
-                DIR_CURSOS / f"{curso} — {cuatri}.md", f"{curso} — {cuatri}",
-                "cuatrimestre",
-                "\n".join(f"- [[{a}]]" for a, _ in asigs)
-                or "*(sin asignaturas todavía)*", "## Asignaturas")
-
+            # Las notas primero: el enlace tiene que apuntar al nombre real del
+            # fichero, que no es el de la carpeta si esta lleva ':' o '?'.
+            nombres = []
             for asig, ruta in asigs:
                 enlaces = materiales_de(ruta)
                 n_asig, n_arch = n_asig + 1, n_arch + len(enlaces)
@@ -550,12 +582,43 @@ def indexar():
                 escribir_indice(nota, asig, "asignatura",
                                 "\n".join(enlaces) or "*(carpeta vacía)*",
                                 "## Archivos")
+                nombres.append(nota.stem)
+
+            escribir_indice(
+                DIR_CURSOS / f"{nombre_nota(curso)} — {nombre_nota(cuatri)}.md",
+                f"{curso} — {cuatri}", "cuatrimestre",
+                "\n".join(f"- [[{n}]]" for n in nombres)
+                or "*(sin asignaturas todavía)*", "## Asignaturas")
+
+        escribir_indice(
+            DIR_CURSOS / f"{nombre_nota(curso)}.md", curso, "curso",
+            "\n".join(f"- [[{nombre_nota(curso)} — {nombre_nota(c)}]]"
+                      for c in cuatris)
+            or "*(sin cuatrimestres todavía)*", "## Cuatrimestres")
     return len(arbol), n_asig, n_arch
 
 
 def cmd_indice():
     n_cur, n_asig, n_arch = indexar()
     print(f"✓ {n_cur} cursos · {n_asig} asignaturas · {n_arch} archivos enlazados")
+
+
+def elegir_asignatura():
+    """Ofrece las del cuatrimestre en curso; escribirla es el último recurso."""
+    etiqueta, asigs = asignaturas_del_cuatrimestre()
+    if not asigs:
+        return input("Asignatura: ").strip()
+    print(f"\n{etiqueta}")
+    for i, a in enumerate(asigs, 1):
+        print(f"  {i}. {a}")
+    print("  0. otra (escribirla)")
+    while True:
+        r = input(f"\nAsignatura [1-{len(asigs)}]: ").strip()
+        if r == "0":
+            return input("Asignatura: ").strip()
+        if r.isdigit() and 1 <= int(r) <= len(asigs):
+            return asigs[int(r) - 1]
+        print("  ↑ elige un número de la lista")
 
 
 def cmd_nuevo(argv):
@@ -579,7 +642,7 @@ def cmd_nuevo(argv):
     a = ap.parse_args(argv)
 
     pide = not (a.asignatura and a.titulo and a.fecha)
-    asignatura = a.asignatura or input("Asignatura: ").strip()
+    asignatura = a.asignatura or elegir_asignatura()
     titulo = a.titulo or input("Examen (p. ej. Parcial 2): ").strip()
     fecha_txt = a.fecha or input("Fecha (AAAA-MM-DD o DD/MM): ").strip()
     dias_txt = a.dias

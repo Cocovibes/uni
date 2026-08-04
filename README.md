@@ -22,7 +22,15 @@ creada, la nota de la asignatura también si no existía (para que el `[[enlace]
 no quede roto), el plan de estudio escrito dentro, y las sesiones en el
 calendario del sistema. La ventana te enseña qué ha programado y se cierra.
 
-Las asignaturas que ya tienes salen como botones: un clic y el campo se rellena.
+**La asignatura no se escribe, se elige.** El desplegable trae las del
+cuatrimestre en curso, que sale de dos cosas que ya existen: el mes de hoy y
+las carpetas de `Curso/Cuatrimestre/`. Septiembre-enero → primer cuatrimestre,
+febrero-junio → segundo, verano → el que viene; y si dos cursos tienen ese
+cuatrimestre, gana el más avanzado. Al cambiar de cuatrimestre la lista cambia
+sola — no hay nada que configurar ni ninguna lista que mantener. Queda `Otra…`
+para lo que se salga del plan.
+
+`uni nuevo` sin argumentos ofrece la misma lista numerada en la terminal.
 
 Lo mismo desde la terminal, si prefieres:
 
