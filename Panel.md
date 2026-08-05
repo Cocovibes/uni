@@ -21,6 +21,8 @@ sort by due
 short mode
 ```
 
+Tus notas y dónde flojeas: [[Notas]].
+
 ## Cuenta atrás
 
 ```dataview

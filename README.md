@@ -163,8 +163,34 @@ uni ventana    la misma ventanita, a mano
 uni proximos   siguientes 14 días
 uni sync       regenera notas + calendario + índice del grafo
 uni indice     solo rehace los nodos curso/cuatrimestre/asignatura
+uni estado     comprueba que todas las piezas siguen vivas
 uni-drive      sincroniza con Google Drive (si lo has configurado)
 ```
+
+## Horario de clases
+
+Cada nota de `Asignaturas/` puede llevar un bloque `horario` con las clases
+fijas de la semana. Salen al calendario como eventos recurrentes hasta `hasta`
+(el último día de docencia), **sin alarma**: ya sabes que tienes clase.
+
+```yaml
+hasta: 2026-12-18
+horario:
+  - {dia: martes,    hora: "09:30", duracion: 60, tipo: Teoría}
+  - {dia: miércoles, hora: "09:30", duracion: 60, tipo: Teoría}
+  - {dia: jueves,    hora: "09:30", duracion: 60, tipo: Problemas, aula: Aula 12}
+```
+
+Aparte, el bloque `semanal` crea **una** hora fija de trabajo por asignatura.
+Esa es la que de verdad sube la nota; la rampa solo evita el desastre. Viene
+comentado en cada asignatura nueva: descoméntalo y elige un hueco.
+
+## Notas y estadísticas
+
+Pon `nota: 6.5` en el frontmatter de un examen y [[Notas]] se rellena solo:
+media por asignatura ordenada **de peor a mejor** (dónde flojeas), suspensos y
+raspados, media por cuatrimestre, y los exámenes ya pasados a los que se te
+olvidó ponerles nota.
 
 ## El grafo
 

@@ -7,6 +7,7 @@ uni.py — motor del vault. Lee las notas de Exámenes/ y Asignaturas/ y:
 
     uni ventana     ventanita de alta rápida (la abre Ctrl+Shift+Ñ)
     uni nuevo       alta de un examen: nota + asignatura + plan + calendario
+    uni estado      comprueba que todas las piezas siguen vivas
     uni sync        regenera todo (incluye el índice del grafo)
     uni indice      solo rehace los nodos curso/cuatrimestre/asignatura
     uni hoy         plan de hoy
@@ -211,6 +212,40 @@ def leer_examenes():
     return out
 
 
+def leer_horario():
+    """Las clases fijas del bloque `horario` de cada asignatura.
+
+    Es una lista porque una asignatura tiene varias clases a la semana, a
+    distinta hora y en distinta aula. `hasta` puede ir en cada clase o una vez
+    para toda la asignatura (el último día de docencia del cuatrimestre).
+    """
+    out = []
+    if not DIR_AS.is_dir():
+        return out
+    for p in sorted(DIR_AS.glob("*.md")):
+        fm, _ = frontmatter(p.read_text(encoding="utf-8"))
+        if not fm or not fm.get("horario"):
+            continue
+        fin_asig = a_fecha(fm["hasta"]) if fm.get("hasta") else None
+        for c in fm["horario"]:
+            dia = str(c.get("dia", "")).lower()
+            if dia not in DIAS:
+                print(f"  ! {p.name}: día '{dia}' no válido", file=sys.stderr)
+                continue
+            try:
+                out.append({
+                    "asignatura": fm.get("nombre", p.stem), "dia": dia,
+                    "hora": a_hora(c.get("hora", "08:30")),
+                    "duracion": int(c.get("duracion", 60)),
+                    "tipo": str(c.get("tipo", "Clase")),
+                    "aula": str(c.get("aula", "")),
+                    "hasta": a_fecha(c["hasta"]) if c.get("hasta") else fin_asig,
+                })
+            except (KeyError, ValueError) as e:
+                print(f"  ! {p.name}: {e}", file=sys.stderr)
+    return out
+
+
 def leer_semanal():
     out = []
     if not DIR_AS.is_dir():
@@ -296,6 +331,7 @@ def utc(dia, hhmm):
 
 
 def evento(uid_, inicio, minutos, titulo, cuerpo, aviso, rrule=None):
+    """aviso=None deja el evento sin alarma: las clases fijas no la necesitan."""
     f = "%Y%m%dT%H%M%SZ"
     ls = ["BEGIN:VEVENT", f"UID:{uid_}",
           f"DTSTAMP:{datetime.now(ZoneInfo('UTC')).strftime(f)}",
@@ -304,12 +340,28 @@ def evento(uid_, inicio, minutos, titulo, cuerpo, aviso, rrule=None):
           f"SUMMARY:{esc(titulo)}", f"DESCRIPTION:{esc(cuerpo)}"]
     if rrule:
         ls.append(f"RRULE:{rrule}")
-    ls += ["BEGIN:VALARM", "ACTION:DISPLAY", f"TRIGGER:-PT{aviso}M",
-           f"DESCRIPTION:{esc(titulo)}", "END:VALARM", "END:VEVENT"]
+    if aviso is not None:
+        ls += ["BEGIN:VALARM", "ACTION:DISPLAY", f"TRIGGER:-PT{aviso}M",
+               f"DESCRIPTION:{esc(titulo)}", "END:VALARM"]
+    ls.append("END:VEVENT")
     return ls
 
 
-def construir_ics(examenes, semanal):
+def eventos_recurrentes(bloques, titulo, cuerpo, aviso):
+    """Un evento semanal por bloque, desde el próximo día que toque."""
+    ls, hoy = [], date.today()
+    for b in bloques:
+        primero = hoy + timedelta(days=(DIAS[b["dia"]] - hoy.weekday()) % 7)
+        rr = "FREQ=WEEKLY"
+        if b["hasta"]:
+            rr += f";UNTIL={b['hasta'].strftime('%Y%m%d')}T235959Z"
+        ls += evento(uid(b["asignatura"], b["dia"], b["hora"], b.get("tipo", "")),
+                     utc(primero, b["hora"]), b["duracion"],
+                     titulo(b), cuerpo(b), aviso, rrule=rr)
+    return ls
+
+
+def construir_ics(examenes, semanal, horario=()):
     ls = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//uni//motor de estudio//ES",
           "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
           "X-WR-CALNAME:Uni — Estudio", f"X-WR-TIMEZONE:{TZ}"]
@@ -331,16 +383,18 @@ def construir_ics(examenes, semanal):
                          f"{tarea}\n\nTemas: {temas}\nExamen: {ex['fecha']} "
                          f"({ex['peso']}% de la nota)", AVISO_MIN)
             n += 1
-    for b in semanal:
-        hoy = date.today()
-        primero = hoy + timedelta(days=(DIAS[b["dia"]] - hoy.weekday()) % 7)
-        rr = "FREQ=WEEKLY"
-        if b["hasta"]:
-            rr += f";UNTIL={b['hasta'].strftime('%Y%m%d')}T235959Z"
-        ls += evento(uid(b["asignatura"], b["dia"], b["hora"]),
-                     utc(primero, b["hora"]), b["duracion"],
-                     f"📘 {b['asignatura']} — mantenimiento", b["tarea"],
-                     AVISO_MIN, rrule=rr)
+    # Las clases fijas no llevan alarma: ya sabes que tienes clase.
+    ls += eventos_recurrentes(
+        horario,
+        lambda c: f"📚 {c['asignatura']}"
+                  + (f" ({c['tipo']})" if c["tipo"] else "")
+                  + (f" · {c['aula']}" if c["aula"] else ""),
+        lambda c: " · ".join(x for x in (c["tipo"], c["aula"]) if x), None)
+
+    ls += eventos_recurrentes(
+        semanal, lambda b: f"📘 {b['asignatura']} — mantenimiento",
+        lambda b: b["tarea"], AVISO_MIN)
+
     ls.append("END:VCALENDAR")
     return "\r\n".join(plegar(x) for x in ls) + "\r\n", n
 
@@ -373,6 +427,14 @@ def nombre_nota(x):
 
 PLANTILLA_ASIGNATURA = """---
 nombre: {nombre}
+# La hora fija semanal es la que de verdad sube la nota; la rampa solo evita
+# el desastre. Descoméntalo y elige un hueco que puedas sostener 15 semanas.
+# semanal:
+#   dia: martes
+#   hora: "18:00"
+#   duracion: 60
+#   tarea: "Problemas de la hoja de esta semana. Sin mirar soluciones."
+#   hasta: 2026-12-18
 ---
 
 # {nombre}
@@ -455,6 +517,9 @@ def crear_examen(asignatura, titulo, fecha, dias, peso, hora, temas,
         f"formato: {formato}\n"
         f"peso: {peso}\n"
         f"dias: {dias}\n"
+        # Para las estadísticas de Notas.md. `nota` se rellena después.
+        "nota:\n"
+        f"cuatrimestre: {' — '.join(cuatrimestre_actual() or ['?'])}\n"
         f"temas:{bloque}\n"
         f"duracion_examen: {duracion}\n"
         "---\n"
@@ -745,17 +810,17 @@ def cmd_nuevo(argv):
 
 
 def cmd_sync():
-    ex, sem = leer_examenes(), leer_semanal()
+    ex, sem, hor = leer_examenes(), leer_semanal(), leer_horario()
     if not ex:
         print("No hay notas de examen en Exámenes/ (¿frontmatter 'tipo: examen'?)")
     tot_hechas = 0
     for e in ex:
         tot_hechas += inyectar_rampa(e)
-    ics, n = construir_ics(ex, sem)
+    ics, n = construir_ics(ex, sem, hor)
     SALIDA.parent.mkdir(parents=True, exist_ok=True)
     SALIDA.write_text(ics, encoding="utf-8")
-    print(f"✓ {len(ex)} exámenes · {n} sesiones · {len(sem)} bloques semanales"
-          f" · {tot_hechas} tareas ya hechas conservadas")
+    print(f"✓ {len(ex)} exámenes · {n} sesiones · {len(hor)} clases · "
+          f"{len(sem)} bloques semanales · {tot_hechas} tareas conservadas")
     print(f"✓ {SALIDA}")
     n_cur, n_asig, n_arch = indexar()
     if n_cur:
@@ -850,6 +915,94 @@ def cmd_gcal(argv):
     print(f"✓ {a.calendario}: {n} nuevos · {c} actualizados · {i} retirados")
 
 
+# ─────────────────────── chequeo del sistema ───────────────────────
+# Ayer un timer se quedó «active (elapsed)» y estuvo 21 h sin sincronizar sin
+# que nada avisara. Con seis unidades, un remoto de rclone, un calendario de
+# EDS y un atajo de GNOME hay demasiadas formas de fallar en silencio.
+
+def _cmd(*args):
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=15)
+        return r.returncode, r.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return 1, ""
+
+
+def _unidad(nombre):
+    """(ok, detalle) de un timer o .path de systemd de usuario."""
+    cod, estado = _cmd("systemctl", "--user", "is-active", nombre)
+    if cod != 0:
+        return False, f"{estado or 'inactiva'} — systemctl --user enable --now {nombre}"
+    if nombre.endswith(".timer"):
+        _, prox = _cmd("systemctl", "--user", "show", nombre,
+                       "-p", "NextElapseUSecRealtime", "--value")
+        if not prox:
+            return False, "activa pero SIN próxima ejecución (timer consumido)"
+        return True, f"próxima: {prox}"
+    return True, estado
+
+
+def cmd_estado():
+    fallos = []
+
+    def linea(ok, que, detalle=""):
+        print(f"  {'✓' if ok else '✗'} {que}" + (f" — {detalle}" if detalle else ""))
+        if not ok:
+            fallos.append(que)
+
+    print("\n\033[1mVault\033[0m")
+    linea(SALIDA.exists(), "calendario generado",
+          f"{len(leer_examenes())} exámenes · {len(leer_horario())} clases")
+    if SALIDA.exists():
+        edad = (datetime.now() - datetime.fromtimestamp(SALIDA.stat().st_mtime)).days
+        linea(edad < 2, "el .ics está fresco", f"regenerado hace {edad} días")
+
+    print("\n\033[1mAutomatismos\033[0m")
+    for u in ("uni-hoy.timer", "uni-drive.timer", "uni-vigila.path"):
+        ok, det = _unidad(u)
+        linea(ok, u, det)
+
+    print("\n\033[1mGoogle Drive\033[0m")
+    cod, _ = _cmd("rclone", "version")
+    if cod != 0:
+        linea(False, "rclone", "no instalado")
+    else:
+        remoto = os.environ.get("UNI_DRIVE_REMOTO", "drive")
+        _, lst = _cmd("rclone", "listremotes")
+        hay = f"{remoto}:" in lst.split()
+        linea(hay, f"remoto {remoto}:", "" if hay else "créalo con rclone config")
+        marca = Path.home() / ".local/state/uni/drive-inicializado"
+        linea(marca.exists(), "línea base de bisync",
+              "" if marca.exists() else "lánzalo con uni-drive")
+
+    print("\n\033[1mCalendario del sistema\033[0m")
+    destino = os.environ.get("UNI_GCAL_CALENDARIO", "").strip()
+    if not destino:
+        print("  · sin calendario destino (opcional)")
+    else:
+        try:
+            import calendario
+            hay = [(n, c) for n, c in calendario.calendarios() if n == destino]
+            linea(bool(hay), f"calendario «{destino}»",
+                  hay[0][1] if hay else "no lo encuentro; uni gcal --listar")
+        except Exception as e:
+            linea(False, f"calendario «{destino}»", str(e))
+
+    print("\n\033[1mEscritorio\033[0m")
+    _, atajo = _cmd("gsettings", "get",
+                    "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"
+                    "/org/gnome/settings-daemon/plugins/media-keys/"
+                    "custom-keybindings/uni-nuevo/", "binding")
+    linea(bool(atajo and atajo != "''"), "atajo de teclado",
+          atajo.strip("'") or "./instalar.sh atajo")
+
+    print()
+    if fallos:
+        print(f"\033[33m{len(fallos)} cosa(s) que revisar.\033[0m\n")
+        sys.exit(1)
+    print("\033[32mTodo en orden.\033[0m\n")
+
+
 def cmd_ventana():
     """La ventanita de alta rápida. Es lo que cuelga de Ctrl+Shift+Ñ."""
     try:
@@ -862,7 +1015,7 @@ def cmd_ventana():
 
 CMDS = {"sync": cmd_sync, "hoy": cmd_hoy, "proximos": cmd_proximos,
         "notificar": cmd_notificar, "ventana": cmd_ventana,
-        "indice": cmd_indice}
+        "indice": cmd_indice, "estado": cmd_estado}
 
 if __name__ == "__main__":
     a = sys.argv[1] if len(sys.argv) > 1 else "hoy"
