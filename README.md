@@ -170,8 +170,13 @@ uni-drive      sincroniza con Google Drive (si lo has configurado)
 ## Horario de clases
 
 Cada nota de `Asignaturas/` puede llevar un bloque `horario` con las clases
-fijas de la semana. Salen al calendario como eventos recurrentes hasta `hasta`
-(el último día de docencia), **sin alarma**: ya sabes que tienes clase.
+fijas de la semana. Se dibuja como **rejilla semanal en la nota del
+cuatrimestre** (`Cursos/Curso — Cuatrimestre`), con enlaces a cada asignatura.
+
+**No va al calendario, y es a propósito.** Son doce eventos que se repiten cada
+semana, que ya te sabes, y que llenan la vista tapando lo único que hay que
+mirar de un vistazo: los exámenes y las sesiones de estudio. El calendario es
+para lo que cambia; el horario es para consultarlo.
 
 ```yaml
 hasta: 2026-12-18

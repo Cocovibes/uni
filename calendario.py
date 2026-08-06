@@ -21,7 +21,9 @@ gi.require_version("EDataServer", "1.2")
 gi.require_version("ECal", "2.0")
 gi.require_version("ICalGLib", "3.0")
 
-from gi.repository import ECal, EDataServer, ICalGLib  # noqa: E402
+import sys  # noqa: E402
+
+from gi.repository import ECal, EDataServer, GLib, ICalGLib  # noqa: E402
 
 SUFIJO = "@uni.local"
 ESPERA = 30          # segundos que damos a EDS para conectar
@@ -78,21 +80,46 @@ def exportar(ics, nombre, cuenta=None):
     ok, hay = cli.get_object_list_sync("#t", None)
     mios = {c.get_uid() for c in (hay or []) if (c.get_uid() or "").endswith(SUFIJO)}
 
-    nuevos = cambiados = 0
+    # Cada evento va por su cuenta: si uno falla —red, permisos, un objeto que
+    # ya no está— el resto tiene que seguir. Antes una sola excepción abortaba
+    # la exportación entera y dejaba el calendario a medias sin avisar.
+    nuevos = cambiados = idos = fallos = 0
+
     for uid, ev in quiero.items():
-        if uid in mios:
-            cli.modify_object_sync(ev, ECal.ObjModType.ALL,
-                                   ECal.OperationFlags.NONE, None)
-            cambiados += 1
-        else:
-            cli.create_object_sync(ev, ECal.OperationFlags.NONE, None)
-            nuevos += 1
+        try:
+            if uid in mios:
+                cli.modify_object_sync(ev, ECal.ObjModType.ALL,
+                                       ECal.OperationFlags.NONE, None)
+                cambiados += 1
+            else:
+                try:
+                    cli.create_object_sync(ev, ECal.OperationFlags.NONE, None)
+                    nuevos += 1
+                except GLib.Error as e:
+                    # Otro sync lo creó entre que listamos y escribimos. No es
+                    # un error: el evento tiene que quedar como dice el .ics.
+                    if "already exists" not in e.message.lower() \
+                            and "ya existe" not in e.message.lower():
+                        raise
+                    cli.modify_object_sync(ev, ECal.ObjModType.ALL,
+                                           ECal.OperationFlags.NONE, None)
+                    cambiados += 1
+        except GLib.Error as e:
+            fallos += 1
+            print(f"  ! no se pudo escribir {uid}: {e.message}", file=sys.stderr)
 
-    # Un examen borrado, o una sesión que ya no toca, desaparece del calendario.
-    idos = 0
+    # Un examen borrado —y con él sus sesiones de estudio— desaparece del
+    # calendario, porque sus UID dejan de estar en el .ics.
     for uid in mios - set(quiero):
-        cli.remove_object_sync(uid, None, ECal.ObjModType.ALL,
-                               ECal.OperationFlags.NONE, None)
-        idos += 1
+        try:
+            cli.remove_object_sync(uid, None, ECal.ObjModType.ALL,
+                                   ECal.OperationFlags.NONE, None)
+            idos += 1
+        except GLib.Error as e:
+            if "not found" in e.message.lower() or "no encontrado" in e.message.lower():
+                idos += 1          # ya no estaba: es justo lo que queríamos
+            else:
+                fallos += 1
+                print(f"  ! no se pudo quitar {uid}: {e.message}", file=sys.stderr)
 
-    return nuevos, cambiados, idos
+    return nuevos, cambiados, idos, fallos

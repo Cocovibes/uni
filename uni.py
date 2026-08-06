@@ -19,6 +19,7 @@ rellena el bloque entre RAMPA:INICIO y RAMPA:FIN, conservando lo marcado.
 """
 
 import argparse
+import fcntl
 import hashlib
 import os
 import re
@@ -383,13 +384,10 @@ def construir_ics(examenes, semanal, horario=()):
                          f"{tarea}\n\nTemas: {temas}\nExamen: {ex['fecha']} "
                          f"({ex['peso']}% de la nota)", AVISO_MIN)
             n += 1
-    # Las clases fijas no llevan alarma: ya sabes que tienes clase.
-    ls += eventos_recurrentes(
-        horario,
-        lambda c: f"📚 {c['asignatura']}"
-                  + (f" ({c['tipo']})" if c["tipo"] else "")
-                  + (f" · {c['aula']}" if c["aula"] else ""),
-        lambda c: " · ".join(x for x in (c["tipo"], c["aula"]) if x), None)
+    # El horario de clases NO va al calendario a propósito: son doce eventos
+    # que se repiten cada semana y que ya te sabes, y llenan la vista de ruido
+    # tapando lo único que hay que mirar, que son los exámenes y las sesiones
+    # de estudio. Vive como tabla en la nota del cuatrimestre.
 
     ls += eventos_recurrentes(
         semanal, lambda b: f"📘 {b['asignatura']} — mantenimiento",
@@ -635,6 +633,33 @@ def asignaturas_del_cuatrimestre(hoy=None):
             [a for c, q, a, _r in cursos() if (c, q) == act and a])
 
 
+DIAS_LECTIVOS = ["lunes", "martes", "miércoles", "jueves", "viernes"]
+
+
+def tabla_horario(asignaturas):
+    """Rejilla semanal de clases, en markdown.
+
+    Vive aquí y no en el calendario: son clases fijas que ya te sabes, y como
+    eventos semanales tapan lo único que hay que mirar de un vistazo.
+    """
+    clases = [c for c in leer_horario() if c["asignatura"] in asignaturas]
+    if not clases:
+        return ""
+    filas = ["| Hora | " + " | ".join(d.capitalize() for d in DIAS_LECTIVOS) + " |",
+             "|---|" + "---|" * len(DIAS_LECTIVOS)]
+    for h in sorted({c["hora"] for c in clases}):
+        celdas = []
+        for i in range(len(DIAS_LECTIVOS)):
+            hoy = [c for c in clases if c["hora"] == h and DIAS[c["dia"]] == i]
+            celdas.append("<br>".join(
+                f"[[{c['asignatura']}]]"
+                + (f" ({c['tipo']})" if c["tipo"] else "")
+                + (f" · {c['aula']}" if c["aula"] else "")
+                for c in hoy) or "·")
+        filas.append(f"| **{h}** | " + " | ".join(celdas) + " |")
+    return "\n".join(filas)
+
+
 def escribir_indice(ruta, titulo, tipo, cuerpo, encabezado):
     """Crea la nota del nodo si falta y le mete el bloque generado."""
     ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -667,11 +692,14 @@ def indexar():
                                 "## Archivos")
                 nombres.append(nota.stem)
 
+            cuerpo = ("\n".join(f"- [[{n}]]" for n in nombres)
+                      or "*(sin asignaturas todavía)*")
+            rejilla = tabla_horario(set(nombres))
+            if rejilla:
+                cuerpo += "\n\n### Horario de clases\n\n" + rejilla
             escribir_indice(
                 DIR_CURSOS / f"{nombre_nota(curso)} — {nombre_nota(cuatri)}.md",
-                f"{curso} — {cuatri}", "cuatrimestre",
-                "\n".join(f"- [[{n}]]" for n in nombres)
-                or "*(sin asignaturas todavía)*", "## Asignaturas")
+                f"{curso} — {cuatri}", "cuatrimestre", cuerpo, "## Asignaturas")
 
         escribir_indice(
             DIR_CURSOS / f"{nombre_nota(curso)}.md", curso, "curso",
@@ -809,7 +837,43 @@ def cmd_nuevo(argv):
     cmd_sync()
 
 
+def huella_examenes():
+    """Qué notas de examen hay. Solo los nombres, no las fechas de cambio:
+    el propio sync reescribe la rampa dentro de cada nota, así que mirar el
+    mtime daría «ha cambiado» siempre y repetiríamos la pasada cada vez."""
+    if not DIR_EX.is_dir():
+        return ()
+    return tuple(sorted(p.name for p in DIR_EX.glob("*.md")))
+
+
 def cmd_sync():
+    """Regenera todo, y repite si algo cambió mientras trabajábamos.
+
+    El .path de systemd no encola disparos: si borras una nota mientras el
+    sync anterior está en marcha, ese cambio no genera un aviso nuevo y se
+    quedaría sin procesar hasta el ciclo de 15 min. Comparando la foto de
+    Exámenes/ antes y después lo recogemos en la misma pasada.
+    """
+    # Un solo sync a la vez. `uni nuevo` lanza el suyo y el .path de systemd
+    # lanza otro por la misma nota: si se solapan, los dos intentan escribir
+    # los mismos eventos y CalDAV devuelve 409 Conflict. Esperamos en vez de
+    # saltarnos el turno, para no perder el cambio que disparó esta pasada.
+    ruta = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "uni-sync.lock"
+    with open(ruta, "w") as cerrojo:
+        try:
+            fcntl.flock(cerrojo, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print("· hay otro sync en marcha; espero mi turno")
+            fcntl.flock(cerrojo, fcntl.LOCK_EX)
+
+        antes = huella_examenes()
+        _sync()
+        if huella_examenes() != antes:
+            print("· Exámenes/ cambió durante el sync; repito")
+            _sync()
+
+
+def _sync():
     ex, sem, hor = leer_examenes(), leer_semanal(), leer_horario()
     if not ex:
         print("No hay notas de examen en Exámenes/ (¿frontmatter 'tipo: examen'?)")
@@ -878,10 +942,11 @@ def exportar_calendario(silencioso=False):
         return
     try:
         import calendario                   # perezoso: necesita EDS y GTK
-        n, c, i = calendario.exportar(SALIDA, destino,
-                                      os.environ.get("UNI_GCAL_CUENTA") or None)
+        n, c, i, f = calendario.exportar(SALIDA, destino,
+                                         os.environ.get("UNI_GCAL_CUENTA") or None)
         if not silencioso:
-            print(f"✓ {destino}: {n} nuevos · {c} actualizados · {i} retirados")
+            print(f"✓ {destino}: {n} nuevos · {c} actualizados · {i} retirados"
+                  + (f" · ⚠ {f} fallaron" if f else ""))
     except Exception as e:                  # nunca debe tumbar el sync
         print(f"  ! calendario «{destino}»: {e}", file=sys.stderr)
 
@@ -909,10 +974,11 @@ def cmd_gcal(argv):
             sys.exit("\n✗ dime a cuál: uni gcal \"Universidad\" -c tu@correo")
         return
     try:
-        n, c, i = calendario.exportar(SALIDA, a.calendario, a.cuenta)
+        n, c, i, f = calendario.exportar(SALIDA, a.calendario, a.cuenta)
     except LookupError as e:
         sys.exit(f"✗ {e}")
-    print(f"✓ {a.calendario}: {n} nuevos · {c} actualizados · {i} retirados")
+    print(f"✓ {a.calendario}: {n} nuevos · {c} actualizados · {i} retirados"
+          + (f" · ⚠ {f} fallaron" if f else ""))
 
 
 # ─────────────────────── chequeo del sistema ───────────────────────
