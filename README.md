@@ -164,6 +164,7 @@ uni proximos   siguientes 14 días
 uni sync       regenera notas + calendario + índice del grafo
 uni indice     solo rehace los nodos curso/cuatrimestre/asignatura
 uni estado     comprueba que todas las piezas siguen vivas
+uni ull        espeja el calendario oficial de exámenes de la ESIT
 uni-drive      sincroniza con Google Drive (si lo has configurado)
 ```
 
@@ -196,6 +197,46 @@ Pon `nota: 6.5` en el frontmatter de un examen y [[Notas]] se rellena solo:
 media por asignatura ordenada **de peor a mejor** (dónde flojeas), suspensos y
 raspados, media por cuatrimestre, y los exámenes ya pasados a los que se te
 olvidó ponerles nota.
+
+## Exámenes oficiales de la ESIT
+
+La ESIT no publica un `.ics`: cuelga un puñado de `.docx` en una carpeta
+pública de Drive, uno por mes de exámenes. `uni ull` los baja, los parsea y
+escribe **`out/uni-ull.ics`**, que se enlaza con GNOME Calendar como un
+calendario aparte, **«Uni — Exámenes ULL»** (naranja), hermano del rojo de
+estudio.
+
+Es un **espejo de solo lectura**: no escribe notas en `Exámenes/` ni toca tu
+plan de estudio. Las fechas oficiales las pone la ESIT; el plan de estudio lo
+decides tú dando el examen de alta con Ctrl+Shift+Ñ.
+
+```
+uni ull        baja, regenera el .ics y avisa si algo cambió
+uni ull ver    lista por terminal los exámenes detectados
+uni ull diff   solo dice si hay cambios (sale 1 si los hay)
+```
+
+El calendario del curso se publica **entero de una vez**, así que el timer
+semanal (`uni-ull.timer`, lunes 09:00) no busca exámenes nuevos: busca
+**rectificaciones**. Si la ESIT mueve una fecha o cambia un aula, salta una
+notificación diciendo exactamente qué se movió. Cuando una asignatura sale de
+una fecha y entra en otra, lo reporta como `~ MOVIDO`, no como un examen
+borrado y otro nuevo.
+
+Solo mira tu curso (`2` por defecto) y todas las convocatorias. Se cambia sin
+tocar el código:
+
+```bash
+UNI_ULL_CURSO=3 uni ull ver          # otro curso
+UNI_ULL_CARPETA=<id> uni ull         # si la ESIT mueve la carpeta de Drive
+```
+
+Ojo con la columna **`C`** del `.docx`: no es la convocatoria, es el
+**cuatrimestre** de la asignatura. La convocatoria la marca el mes del fichero.
+
+`out/uni-ull.ics` es la **única excepción** del `.gitignore` de `out/`: se
+versiona a propósito para tener una URL estable a la que suscribirse desde el
+móvil. Son fechas ya públicas. `uni-estudio.ics` no se publica nunca.
 
 ## El grafo
 

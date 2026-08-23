@@ -6,6 +6,7 @@
 #   ./instalar.sh plugins      solo los plugins de Obsidian
 #   ./instalar.sh atajo        solo el atajo de teclado (Ctrl+Shift+Ñ)
 #   ./instalar.sh drive        solo la sincronización con Google Drive
+#   ./instalar.sh ull          solo los exámenes oficiales de la ESIT
 #
 # No usa sudo en ningún momento.
 
@@ -157,6 +158,37 @@ vigilante() {
   ok "uni-vigila.path activo — un examen nuevo o borrado se procesa al momento"
 }
 
+# ─────────── exámenes oficiales de la ESIT (semanal) ───────────────
+# El calendario oficial son .docx en una carpeta pública de Drive, así que
+# esto necesita el mismo rclone que la sincronización del vault.
+ull() {
+  head_ "Exámenes oficiales (ESIT)"
+  if ! command -v rclone >/dev/null; then
+    info "rclone no está; me lo salto (lo necesita para bajar los .docx)"
+    return 0
+  fi
+  local remoto="${UNI_DRIVE_REMOTO:-drive}"
+  if ! rclone listremotes | grep -qx "$remoto:"; then
+    info "el remoto '$remoto:' aún no existe; me lo salto"
+    info "  rclone config  &&  ./instalar.sh ull"
+    return 0
+  fi
+
+  d="$HOME/.config/evolution/sources"; mkdir -p "$d"
+  sed "s|@VAULT@|$VAULT|g" "$VAULT/sistema/uni-ull.source" > "$d/uni-ull.source"
+  ok "fuente EDS «Uni — Exámenes ULL» → out/uni-ull.ics"
+
+  command -v systemctl >/dev/null || { warn "Sin systemd; ejecútalo a mano."; return 0; }
+  d="$HOME/.config/systemd/user"; mkdir -p "$d"
+  sed -e "s|@VAULT@|$VAULT|g" -e "s|@PY@|$PY|g" \
+      "$VAULT/sistema/uni-ull.service" > "$d/uni-ull.service"
+  cp "$VAULT/sistema/uni-ull.timer" "$d/uni-ull.timer"
+  systemctl --user daemon-reload
+  systemctl --user enable --now uni-ull.timer
+  ok "uni-ull.timer activo — lunes 09:00"
+  info "a mano: uni ull sync   ·   ver: uni ull ver"
+}
+
 # ───────────── atajo de teclado (GNOME custom keybinding) ──────────
 # Ctrl+Shift+Ñ abre la ventanita de alta rápida. La ñ es el keysym 'ntilde'.
 # Idempotente: reutiliza la entrada 'uni-nuevo' si ya está en la lista, y
@@ -258,8 +290,9 @@ case "${1:-todo}" in
   atajo)   atajo ;;
   drive)   drive ;;
   vigilante) vigilante ;;
+  ull)     ull ;;
   todo)
-    requisitos; plugins; comando; aviso; vigilante; atajo; drive; calendario
+    requisitos; plugins; comando; aviso; vigilante; atajo; drive; calendario; ull
     head_ "Primer sync"
     mkdir -p "$VAULT/Exámenes" "$VAULT/Asignaturas"
     "$PY" "$VAULT/uni.py" sync

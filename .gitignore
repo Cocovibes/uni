@@ -15,8 +15,14 @@
 /Adjuntos/
 /.trash/
 
-# Calendario generado (se reconstruye con `uni sync`)
-/out/
+# Calendario generado (se reconstruye con `uni sync`).
+# EXCEPCIÓN: uni-ull.ics SÍ se publica. Son las fechas oficiales de la ESIT,
+# que ya son públicas, y publicarlo es lo que permite SUSCRIBIRSE desde el
+# iPhone (Ajustes → Calendario → Añadir calendario suscrito).
+# uni-estudio.ics NO se publica NUNCA: sale de Exámenes/ y Asignaturas/, que
+# están ignorados justamente por ser personales.
+/out/*
+!/out/uni-ull.ics
 
 # rclone escribe aquí el hash del fichero de filtros para saber si ha cambiado.
 # Es estado local suyo, no configuración.

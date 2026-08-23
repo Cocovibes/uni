@@ -1,0 +1,33 @@
+# Fuente de Evolution Data Server para el calendario OFICIAL de exámenes de
+# la ESIT. Es hermano de uni-estudio.source, pero de otro fichero y otro
+# color: el rojo es TU plan de estudio, el naranja son las fechas oficiales.
+#
+# Va en ~/.config/evolution/sources/uni-ull.source
+#
+# Los dos detalles que cuestan encontrar (los mismos que en uni-estudio):
+#   · La sección es [Local Backend], CON ESPACIO. Con [Local] se ignora en
+#     silencio y EDS se crea un calendario vacío suyo.
+#   · CustomFile es un GFile: necesita URI file://, no una ruta pelada.
+
+[Data Source]
+DisplayName=Uni — Exámenes ULL
+Enabled=true
+Parent=local-stub
+
+[Calendar]
+BackendName=local
+Color=#e66100
+Selected=true
+Order=2
+
+[Local Backend]
+CustomFile=file://@VAULT@/out/uni-ull.ics
+Writable=false
+
+[Offline]
+StaySynchronized=true
+
+[Refresh]
+Enabled=true
+EnabledOnMeteredNetwork=true
+IntervalMinutes=60
