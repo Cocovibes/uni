@@ -9,7 +9,7 @@ Recibe el módulo uni por parámetro en vez de importarlo, para no montar un
 import circular ni una segunda copia del motor.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 import gi
 
@@ -89,13 +89,9 @@ class Alta:
         self.f_tipo = Adw.ComboRow(title="Tipo")
         self.f_tipo.set_model(Gtk.StringList.new(self.uni.TIPOS))
 
-        self.f_dias = Adw.SpinRow.new_with_range(1, 30, 1)
-        self.f_dias.set_title("Días de estudio")
-        self.f_dias.set_subtitle("una sesión por día, D-N … D-1")
-        self.f_dias.set_value(self.uni.DIAS_ESTUDIO_DEF)
 
         for f in (self.f_clase, self.f_asig, self.f_otra, self.f_examen,
-                  self.f_tipo, self.f_fecha, self.f_dias):
+                  self.f_tipo, self.f_fecha):
             grupo.add(f)
 
         mas = Adw.ExpanderRow(title="Más opciones")
@@ -187,7 +183,6 @@ class Alta:
         if fecha < date.today():
             return self._aviso(f"Esa fecha ya pasó ({fecha:%d/%m/%Y}).")
 
-        dias = int(self.f_dias.get_value())
         peso = int(self.f_peso.get_value())
         duracion = int(self.f_duracion.get_value())
         temas = [t.strip() for t in self.f_temas.get_text().split(",") if t.strip()]
@@ -196,7 +191,7 @@ class Alta:
         tipo = ("Entrega" if clase == "entrega"
                 else self.uni.TIPOS[self.f_tipo.get_selected()])
         try:
-            self.uni.crear_examen(asig, examen, fecha, dias, peso, hora,
+            self.uni.crear_examen(asig, examen, fecha, peso, hora,
                                   temas, duracion, tipo, clase)
         except FileExistsError:
             return self._aviso(f"Ya existe «{asig} — {examen}».")
@@ -204,29 +199,21 @@ class Alta:
             return self._aviso(f"No se pudo escribir la nota: {e}")
         self.uni.crear_asignatura(asig)
         self.uni.cmd_sync()
-        self._resumen(asig, examen, fecha, dias, peso, duracion)
+        self._resumen(asig, examen, fecha, peso, duracion)
 
     def _aviso(self, texto):
         self.toasts.add_toast(Adw.Toast(title=texto, timeout=4))
 
-    def _resumen(self, asig, examen, fecha, dias, peso, duracion):
-        """Ya está guardado: enseñar qué se ha metido en el calendario."""
-        plan = self.uni.plan_de({"fecha": fecha, "dias": dias, "peso": peso,
-                                 "duracion": duracion})
+    def _resumen(self, asig, examen, fecha, peso, duracion):
+        """Ya está guardado: enseñar qué ha ido al calendario."""
         while (hijo := self.caja.get_first_child()) is not None:
             self.caja.remove(hijo)
 
         grupo = Adw.PreferencesGroup(
             title=f"✓ {asig} — {examen}",
-            description=f"{fecha:%A %d/%m/%Y} · {peso}% · {len(plan)} sesiones "
-                        f"en el calendario")
-        for d, nombre, mins, tarea in plan:
-            cuando = fecha - timedelta(days=d)
-            fila = Adw.ActionRow(
-                title=f"D-{d} · {cuando:%a %d/%m} — {nombre}",
-                subtitle=f"{tarea} ({mins or duracion} min)")
-            fila.set_subtitle_lines(2)
-            grupo.add(fila)
+            description="En el calendario y en el surtidor de tareas")
+        grupo.add(Adw.ActionRow(title=f"{fecha:%A %d/%m/%Y}",
+                                subtitle=f"{peso}% de la nota · {duracion} min"))
         self.caja.append(grupo)
 
         self.btn_guardar.set_visible(False)

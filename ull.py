@@ -3,9 +3,22 @@
 ull.py — espeja el calendario OFICIAL de exámenes de la ESIT (ULL) en un
 calendario propio, aparte del de estudio.
 
-    ull sync        baja los .docx, regenera out/uni-ull.ics y avisa si cambió
-    ull ver         enseña por terminal los exámenes que detecta
-    ull diff        solo dice si hay cambios respecto a la última vez
+    ull sync            baja los .docx, regenera out/uni-ull.ics y avisa si cambió
+    ull sync --forzar   escribe aunque la cosecha parezca sospechosa
+    ull ver             enseña por terminal los exámenes que detecta
+    ull diff            solo dice si hay cambios respecto a la última vez
+
+Está pensado para correr solo en un timer semanal, así que lo importante no
+es que funcione hoy sino que FALLE RUIDOSAMENTE el día que la ESIT cambie
+algo. De ahí las cuatro defensas:
+
+  · las columnas se leen POR NOMBRE de cabecera, no por posición, así que
+    añadir o mover una columna no hace que se lea la de al lado;
+  · una tabla sin cabecera reconocible se ignora entera y se reporta;
+  · NUNCA se escribe un calendario vacío ni uno que pierda más de la mitad de
+    los exámenes: se deja el anterior (viejo pero correcto) y se avisa;
+  · el id de la carpeta de Drive se resuelve desde la página de la ESIT; el
+    id a fuego es solo la red de seguridad.
 
 La ESIT no publica un .ics: cuelga un puñado de .docx en una carpeta pública
 de Google Drive, uno por mes de exámenes (enero, marzo, mayo, junio, julio).
@@ -29,11 +42,14 @@ import re
 import subprocess
 import sys
 import tempfile
+import time as _time
+import unicodedata
+import urllib.error
+import urllib.request
 import zipfile
-from datetime import date, datetime, time, timedelta
+from datetime import date
 from pathlib import Path
 from xml.etree import ElementTree as ET
-from zoneinfo import ZoneInfo
 
 import uni
 
@@ -78,22 +94,115 @@ def bonito(texto):
                     for i, p in enumerate(palabras))
 
 
+def normalizar(texto):
+    """Sin acentos, minúsculas, sin espacios de sobra. Para comparar cabeceras."""
+    plano = unicodedata.normalize("NFKD", texto)
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return " ".join(plano.lower().split())
+
+
+# Cabecera del .docx → clave interna. Se busca POR NOMBRE, no por posición: si
+# la ESIT añade una columna o las reordena, esto sigue funcionando en vez de
+# leer en silencio la columna equivocada, que es el fallo que no se ve venir.
+COLUMNAS = {
+    "dia": "dia", "fecha": "fecha", "curso": "curso", "c": "cuatri",
+    "cuatrimestre": "cuatri", "asignatura": "asignatura", "hora": "hora",
+    "aula": "aula", "observaciones": "obs", "observacion": "obs",
+}
+# Sin estas no hay examen que valga; si falta una, la tabla no es lo que creemos.
+IMPRESCINDIBLES = {"fecha", "curso", "asignatura", "hora"}
+
+
+def mapear_cabecera(celdas):
+    """{clave: índice} si esta fila es la cabecera de la tabla; si no, None."""
+    mapa = {}
+    for i, c in enumerate(celdas):
+        clave = COLUMNAS.get(normalizar(c))
+        if clave and clave not in mapa:
+            mapa[clave] = i
+    return mapa if IMPRESCINDIBLES <= set(mapa) else None
+
+
 # ─────────────────────────── descarga ──────────────────────────────
 
-def descargar(destino):
-    """Copia los .docx de la carpeta pública con el rclone ya configurado."""
+RE_CARPETA = re.compile(r"drive\.google\.com/drive/folders/([A-Za-z0-9_-]{20,})")
+
+
+def carpeta_de_la_pagina(timeout=15):
+    """El id de la carpeta de Drive, leído de la página de la ESIT.
+
+    Tener el id a fuego es la fragilidad más tonta: el día que la ESIT cuelgue
+    otra carpeta, el sistema seguiría bajando la del año pasado sin quejarse.
+    La página sí es estable, así que se pregunta ahí y el id fijo queda solo
+    como red de seguridad si la web no responde o cambia de formato.
+    """
+    try:
+        pet = urllib.request.Request(PAGINA, headers={"User-Agent": "uni/1.0"})
+        with urllib.request.urlopen(pet, timeout=timeout) as r:
+            html = r.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    ids = RE_CARPETA.findall(html)
+    # Si hay varias, no adivinamos: nos quedamos con la fija conocida.
+    return ids[0] if len(set(ids)) == 1 else None
+
+
+def resolver_carpeta():
+    """(id, de_dónde_salió). UNI_ULL_CARPETA manda siempre."""
+    if os.environ.get("UNI_ULL_CARPETA"):
+        return os.environ["UNI_ULL_CARPETA"], "variable de entorno"
+    v = carpeta_de_la_pagina()
+    if v and v != CARPETA:
+        return v, "página de la ESIT (¡cambió respecto a la conocida!)"
+    if v:
+        return v, "página de la ESIT"
+    return CARPETA, "id fijo (la página no respondió)"
+
+
+def descargar(destino, intentos=3):
+    """Copia los .docx de la carpeta pública con el rclone ya configurado.
+
+    Reintenta: esto lo dispara un timer semanal, y morir por un corte de red
+    de tres segundos significaría enterarse del cambio de fecha una semana
+    tarde.
+    """
+    if not shutil_which("rclone"):
+        raise RuntimeError(
+            "falta rclone, que es quien baja los .docx.\n"
+            "  sudo dnf install rclone  &&  rclone config")
     remoto = os.environ.get("UNI_DRIVE_REMOTO", "drive")
-    r = subprocess.run(
-        ["rclone", "copy", "--drive-root-folder-id", CARPETA,
-         f"{remoto}:", str(destino), "--include", "*.docx"],
-        capture_output=True, text=True)
-    if r.returncode:
-        raise RuntimeError(f"rclone falló: {r.stderr.strip() or r.stdout.strip()}")
+    carpeta, origen = resolver_carpeta()
+
+    ultimo = ""
+    for n in range(1, intentos + 1):
+        r = subprocess.run(
+            ["rclone", "copy", "--drive-root-folder-id", carpeta,
+             f"{remoto}:", str(destino), "--include", "*.docx",
+             "--timeout", "60s", "--retries", "1"],
+            capture_output=True, text=True)
+        if r.returncode == 0:
+            break
+        ultimo = (r.stderr or r.stdout).strip().splitlines()[-1:] or [""]
+        ultimo = ultimo[0]
+        if n < intentos:
+            _time.sleep(3 * n)
+    else:
+        raise RuntimeError(
+            f"rclone falló {intentos} veces (carpeta {carpeta}, {origen}).\n"
+            f"  último error: {ultimo}\n"
+            f"  ¿sigue existiendo la carpeta? {PAGINA}")
+
     docs = sorted(destino.glob("*.docx"))
     if not docs:
         raise RuntimeError(
-            f"la carpeta {CARPETA} no tiene .docx. ¿La movió la ESIT?\n  {PAGINA}")
+            f"la carpeta {carpeta} ({origen}) no tiene ningún .docx.\n"
+            f"  ¿La movió la ESIT, o cambió a PDF? Míralo en:\n  {PAGINA}")
     return docs
+
+
+def shutil_which(x):
+    from shutil import which
+    return which(x)
 
 
 # ─────────────────────────── parseo ────────────────────────────────
@@ -104,53 +213,86 @@ def celdas(tr):
 
 
 def parsear(ruta):
-    """[(fecha, hora, asignatura, aula, obs, cuatri)] de un .docx de la ESIT.
+    """(exámenes, incidencias) de un .docx de la ESIT.
 
-    Tolerante a propósito: si una fila no encaja, se salta en vez de reventar.
-    Un calendario a medias es más útil que un traceback en un timer semanal.
+    Localiza la CABECERA de cada tabla y lee por nombre de columna. Si una
+    tabla no tiene cabecera reconocible se ignora entera y se anota: mejor
+    decir «esta tabla no la entiendo» que leer la columna de al lado.
+
+    Tolerante fila a fila (una fila rara se salta), pero las incidencias se
+    devuelven para que quien llame decida si el resultado es de fiar.
     """
-    raiz = ET.fromstring(zipfile.ZipFile(ruta).read("word/document.xml"))
-    out, fecha = [], None
+    try:
+        xml = zipfile.ZipFile(ruta).read("word/document.xml")
+        raiz = ET.fromstring(xml)
+    except (zipfile.BadZipFile, KeyError, ET.ParseError) as e:
+        return [], [f"{ruta.name}: no es un .docx legible ({e})"]
+
+    out, incidencias, tablas = [], [], 0
     for tbl in raiz.iter(W + "tbl"):
-        for tr in tbl.iter(W + "tr"):
+        filas = list(tbl.iter(W + "tr"))
+        mapa, fecha = None, None
+        for tr in filas:
             c = celdas(tr)
-            if len(c) < 7:
+            if mapa is None:                       # aún buscando la cabecera
+                mapa = mapear_cabecera(c)
                 continue
-            m = RE_FECHA.match(c[1])
+            tablas += 1 if len(out) == 0 else 0
+
+            def celda(clave, por_defecto=""):
+                i = mapa.get(clave)
+                return c[i].strip() if i is not None and i < len(c) else por_defecto
+
+            m = RE_FECHA.match(celda("fecha"))
             if m:                                   # arrastra la fecha
                 d, mes, a = (int(x) for x in m.groups())
                 try:
                     fecha = date(a, mes, d)
                 except ValueError:
+                    incidencias.append(f"{ruta.name}: fecha imposible {celda('fecha')}")
                     fecha = None
-            if fecha is None or c[2] != CURSO:
+            if fecha is None or celda("curso") != CURSO:
                 continue
-            if not re.match(r"^\d{1,2}:\d{2}$", c[5]):
+            hora = celda("hora")
+            if not re.match(r"^\d{1,2}:\d{2}$", hora):
+                continue
+            asig = celda("asignatura")
+            if not asig:
+                incidencias.append(f"{ruta.name}: fila {fecha} {hora} sin asignatura")
                 continue
             out.append({
                 "fecha": fecha.isoformat(),
-                "hora": c[5] if len(c[5]) == 5 else f"0{c[5]}",
-                "asignatura": c[4].strip(),
-                "aula": c[6].strip(),
-                "obs": (c[7].strip() if len(c) > 7 else ""),
-                "cuatri": c[3].strip(),
+                "hora": hora if len(hora) == 5 else f"0{hora}",
+                "asignatura": asig,
+                "aula": celda("aula"),
+                "obs": celda("obs"),
+                "cuatri": celda("cuatri"),
             })
-    return out
+        if mapa is None and filas:
+            incidencias.append(
+                f"{ruta.name}: una tabla de {len(filas)} filas sin cabecera "
+                f"reconocible (¿cambió el formato?)")
+    return out, incidencias
 
 
 def examenes():
-    """Todos los exámenes del curso, de todos los meses, sin duplicados."""
+    """(exámenes, incidencias) del curso, de todos los meses, sin duplicados."""
     with tempfile.TemporaryDirectory() as tmp:
         docs = descargar(Path(tmp))
-        vistos, out = set(), []
+        vistos, out, incidencias = set(), [], []
         for d in docs:
-            for e in parsear(d):
+            exs, inc = parsear(d)
+            incidencias += inc
+            if not exs:
+                incidencias.append(f"{d.name}: 0 exámenes del curso {CURSO}")
+            for e in exs:
                 clave = (e["fecha"], e["hora"], e["asignatura"], e["obs"])
                 if clave in vistos:
                     continue
                 vistos.add(clave)
                 out.append(e)
-    return sorted(out, key=lambda e: (e["fecha"], e["hora"], e["asignatura"]))
+    out.sort(key=lambda e: (e["fecha"], e["hora"], e["asignatura"]))
+    return out, incidencias
 
 
 # ──────────────────────────── ICS ──────────────────────────────────
@@ -257,16 +399,54 @@ def resumen(nuevos, fuera, movidos):
     return ls
 
 
+class CosechaSospechosa(RuntimeError):
+    """El parseo salió tan raro que NO se toca el calendario."""
+
+
+def revisar_cosecha(exs, previos, incidencias, forzar=False):
+    """Freno de mano: negarse a pisar el calendario con una cosecha dudosa.
+
+    El fallo peligroso de esto no es un traceback, es el SILENCIO: si la ESIT
+    cambia el formato del .docx, el parseo devuelve cero filas, se escribe un
+    .ics vacío y el calendario de exámenes se queda en blanco sin que nadie se
+    entere. Un examen que desaparece sin avisar es mucho peor que un error.
+
+    Así que: cero exámenes no se escribe nunca, y una caída de más de la mitad
+    respecto a lo que había tampoco. Se avisa y se deja el .ics anterior — que
+    estará viejo, pero es correcto. `--forzar` es la salida cuando la caída es
+    real (un curso que de verdad se queda sin exámenes).
+    """
+    if forzar:
+        return
+    detalle = ("\n  " + "\n  ".join(incidencias)) if incidencias else ""
+    if not exs:
+        raise CosechaSospechosa(
+            f"0 exámenes del curso {CURSO}: NO toco el calendario.\n"
+            f"  El .ics anterior se queda como estaba.{detalle}\n"
+            f"  Míralo en: {PAGINA}\n"
+            f"  Si de verdad no hay exámenes: uni ull sync --forzar")
+    if previos and len(exs) < len(previos) / 2:
+        raise CosechaSospechosa(
+            f"de {len(previos)} exámenes a {len(exs)}: caída sospechosa, "
+            f"NO toco el calendario.{detalle}\n"
+            f"  Si el cambio es real: uni ull sync --forzar")
+
+
 # ──────────────────────────── comandos ─────────────────────────────
 
-def cmd_sync(avisar=True):
-    exs = examenes()
-    nuevos, fuera, movidos = comparar(leer_estado(), exs)
+def cmd_sync(avisar=True, forzar=False):
+    exs, incidencias = examenes()
+    previos = leer_estado()
+    revisar_cosecha(exs, previos, incidencias, forzar)
+
+    nuevos, fuera, movidos = comparar(previos, exs)
     SALIDA.parent.mkdir(parents=True, exist_ok=True)
     escribir_si_cambia(construir_ics(exs))
     guardar_estado(exs)
 
     print(f"✓ {len(exs)} exámenes del curso {CURSO} · {SALIDA}")
+    for i in incidencias:
+        print(f"  ! {i}", file=sys.stderr)
     cambios = resumen(nuevos, fuera, movidos)
     if not cambios:
         print("· sin cambios respecto a la última comprobación")
@@ -281,7 +461,9 @@ def cmd_sync(avisar=True):
 
 
 def cmd_ver():
-    exs = examenes()
+    exs, incidencias = examenes()
+    for i in incidencias:
+        print(f"  ! {i}", file=sys.stderr)
     if not exs:
         print(f"No hay exámenes del curso {CURSO}.")
         return 0
@@ -298,7 +480,8 @@ def cmd_ver():
 
 
 def cmd_diff():
-    nuevos, fuera, movidos = comparar(leer_estado(), examenes())
+    exs, _inc = examenes()
+    nuevos, fuera, movidos = comparar(leer_estado(), exs)
     cambios = resumen(nuevos, fuera, movidos)
     print("\n".join(cambios) if cambios else "· sin cambios")
     return 1 if cambios else 0
@@ -312,11 +495,20 @@ def main(argv=None):
         return 0
     try:
         if cmd == "sync":
-            return cmd_sync(avisar="--sin-aviso" not in argv)
+            return cmd_sync(avisar="--sin-aviso" not in argv,
+                            forzar="--forzar" in argv)
         if cmd == "ver":
             return cmd_ver()
         if cmd == "diff":
             return cmd_diff()
+    except CosechaSospechosa as e:
+        # Esto SÍ se grita: el calendario se ha quedado sin actualizar.
+        print(f"✗ {e}", file=sys.stderr)
+        subprocess.run(
+            ["notify-send", "-a", "Uni", "-u", "critical",
+             "⚠️ Calendario de exámenes SIN actualizar",
+             str(e).splitlines()[0]], check=False)
+        return 1
     except RuntimeError as e:
         print(f"✗ {e}", file=sys.stderr)
         return 1

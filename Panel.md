@@ -1,41 +1,76 @@
 # Panel
 
-Lo único que tienes que mirar. Si algo no sale aquí, no toca hoy.
+Lo único que tienes que mirar. Aquí solo hay **obligaciones reales**: exámenes,
+prácticas y entregas con fecha oficial. Nada de tareas inventadas.
 
-## Hoy y atrasado
+## Surtidor
 
-```tasks
-not done
-due before tomorrow
-sort by due
-short mode
-```
-
-## Próximos 7 días
-
-```tasks
-not done
-due after today
-due before in 8 days
-sort by due
-short mode
-```
-
-Tus notas y dónde flojeas: [[Notas]].
-
-## Cuenta atrás
+Una fila por obligación. Pincha en la cabecera de cualquier columna para
+reordenar: por lo que falta, por dificultad, por peso o por asignatura.
 
 ```dataview
 TABLE WITHOUT ID
-  file.link AS "Examen",
+  file.link AS "Qué",
   asignatura AS "Asignatura",
-  fecha AS "Fecha",
-  peso AS "Peso %",
-  date(fecha) - date(today) AS "Falta"
+  dateformat(date(fecha), "EEE dd/MM") AS "Cuándo",
+  (date(fecha) - date(today)).days AS "Faltan",
+  choice(dificultad, "🔴🔴🔴🔴🔴", "") AS "Dif.",
+  peso AS "%",
+  formato AS "Tipo"
 FROM "Exámenes"
-WHERE tipo = "examen" AND date(fecha) >= date(today)
-SORT fecha ASC
+WHERE date(fecha) >= date(today)
+SORT date(fecha) ASC
 ```
+
+### Por dificultad
+
+Lo más caro primero, sin mirar el calendario. Para decidir qué atacas hoy
+cuando todo está lejos.
+
+```dataview
+TABLE WITHOUT ID
+  file.link AS "Qué",
+  asignatura AS "Asignatura",
+  dificultad AS "Dif.",
+  peso AS "%",
+  dateformat(date(fecha), "dd/MM") AS "Cuándo",
+  (date(fecha) - date(today)).days AS "Faltan"
+FROM "Exámenes"
+WHERE date(fecha) >= date(today)
+SORT dificultad DESC, peso DESC, date(fecha) ASC
+```
+
+### Esta semana
+
+```dataview
+TABLE WITHOUT ID
+  file.link AS "Qué",
+  dateformat(date(fecha), "EEE dd/MM HH:mm") AS "Cuándo",
+  dificultad AS "Dif.",
+  peso AS "%"
+FROM "Exámenes"
+WHERE date(fecha) >= date(today) AND date(fecha) <= date(today) + dur(7 days)
+SORT date(fecha) ASC
+```
+
+### Ya pasados, sin nota
+
+Lo que hiciste y no apuntaste. [[Notas]] tiene las estadísticas.
+
+```dataview
+TABLE WITHOUT ID
+  file.link AS "Qué",
+  dateformat(date(fecha), "dd/MM/yyyy") AS "Cuándo"
+FROM "Exámenes"
+WHERE date(fecha) < date(today) AND !nota
+SORT date(fecha) DESC
+```
+
+## Fechas oficiales de la ESIT
+
+Las de la ESIT viven en su propio calendario (**Uni — Exámenes ULL**, naranja),
+aparte del tuyo. `uni ull ver` las lista; el timer las revisa cada lunes y avisa
+si mueven alguna.
 
 ## Asignaturas
 
@@ -45,24 +80,17 @@ FROM "Asignaturas"
 SORT file.name ASC
 ```
 
-Cada curso es una nota en `Cursos/`, enlazada a sus cuatrimestres, y cada
-cuatrimestre a sus asignaturas. Los archivos cuelgan de la nota de cada
-asignatura. Lo rehace `uni sync`: si dejas un PDF en la carpeta de una
-asignatura, aparece solo.
-
 ---
 
 ## Cómo se usa
 
-1. **Un examen nuevo** → **Ctrl + Shift + Ñ**, rellenar y Guardar.
-   En terminal: `uni nuevo "Cálculo Diferencial" "Parcial 2" 13/11`
-   (o `uni nuevo` a secas y te lo pregunta). También vale la plantilla `Examen`
-   en `Exámenes/` + `uni sync`.
-2. El plan de estudio aparece solo dentro de la nota del examen, en el calendario
-   del sistema, y a las 08:30 como notificación.
+1. **Algo nuevo con fecha** → **Ctrl + Shift + Ñ**, rellenar y Guardar.
+   En terminal: `uni nuevo "Ingeniería Térmica" "Parcial 2" 13/11`
+2. Aparece en el calendario del sistema y en el surtidor de aquí arriba.
 
-Marcar `[x]` una tarea es seguro: `uni sync` conserva lo hecho.
+**`dificultad: 1-5`** en el frontmatter ordena el surtidor. Si la dejas vacía
+se estima desde el `peso`, solo para que la columna no salga en blanco — la
+buena es la que pongas tú.
 
-`dias` manda: **N días de estudio → N sesiones, una por día** (D-N…D-1). Por
-defecto **5**. `--dias "1 semana"` para la rampa entera; `dias: auto` para el
-modo antiguo en el que mandaba el `peso`.
+Este sistema **no inventa tareas**. No hay rampa de estudio, ni bloques
+semanales, ni horario de clases: si no tiene fecha oficial, no está aquí.
