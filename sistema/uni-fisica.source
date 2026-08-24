@@ -1,0 +1,33 @@
+# Fuente de Evolution Data Server para el calendario OFICIAL de exámenes de la
+# Sección de Física. Hermano de uni-ull.source (que es el de la ESIT) y de
+# uni-estudio.source: el rojo es TU plan de estudio, este es la fecha oficial.
+#
+# Va en ~/.config/evolution/sources/uni-fisica.source
+#
+# Los dos detalles que cuestan encontrar (los mismos que en uni-estudio):
+#   · La sección es [Local Backend], CON ESPACIO. Con [Local] se ignora en
+#     silencio y EDS se crea un calendario vacío suyo.
+#   · CustomFile es un GFile: necesita URI file://, no una ruta pelada.
+
+[Data Source]
+DisplayName=Uni — Exámenes oficiales
+Enabled=true
+Parent=local-stub
+
+[Calendar]
+BackendName=local
+Color=#9141ac
+Selected=true
+Order=3
+
+[Local Backend]
+CustomFile=file://@VAULT@/out/uni-fisica.ics
+Writable=false
+
+[Offline]
+StaySynchronized=true
+
+[Refresh]
+Enabled=true
+EnabledOnMeteredNetwork=true
+IntervalMinutes=60

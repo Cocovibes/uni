@@ -1,0 +1,15 @@
+[Unit]
+Description=Comprueba una vez por semana si Física movió algún examen
+
+[Timer]
+# Lunes a las 09:10, diez minutos después del de la ESIT para no solaparlos.
+# El calendario del curso se publica entero de una vez, así que esto no busca
+# exámenes nuevos: busca RECTIFICACIONES (una fecha movida, un aula cambiada).
+OnCalendar=Mon *-*-* 09:10
+# Si el portátil estaba apagado el lunes, salta al encender.
+Persistent=true
+AccuracySec=5min
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

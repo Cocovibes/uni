@@ -165,8 +165,43 @@ uni sync       regenera notas + calendario + índice del grafo
 uni indice     solo rehace los nodos curso/cuatrimestre/asignatura
 uni estado     comprueba que todas las piezas siguen vivas
 uni ull        espeja el calendario oficial de exámenes de la ESIT
+uni fisica     lo mismo para la Sección de Física
 uni-drive      sincroniza con Google Drive (si lo has configurado)
 ```
+
+## Exámenes oficiales de Física
+
+`uni fisica sync` espeja el calendario OFICIAL de la Sección de Física en un
+calendario propio (morado), aparte del de estudio. Hermano de `uni ull`, que
+hace lo mismo para la ESIT — van separados porque cada centro publica de una
+forma distinta y no comparten una línea de parseo: la ESIT cuelga `.docx` con
+una tabla de columnas fijas; Física cuelga **un PDF** con una rejilla visual.
+Solo necesita `curl` y `pdftotext`: ni rclone ni credenciales.
+
+**El curso no se puede leer del PDF.** Que una asignatura sea de 1º o de 2º lo
+dice el COLOR de la celda, y el color no sobrevive a la extracción de texto —
+el único texto es «1º Y 2º GRADUADO EN FÍSICA», que agrupa dos cursos. Por eso
+no se filtra por curso sino por TUS asignaturas: cada nota declara con qué
+nombre la llama el calendario oficial,
+
+```yaml
+oficial: "M. MAT. IV"
+```
+
+y solo se espejan las que casen. Sale mejor que adivinar el curso: si te queda
+una asignatura de otro año, también aparece. Sin ninguna `oficial:`, el paso
+del instalador se salta solo.
+
+```
+uni fisica ver    los exámenes que detecta
+uni fisica diff   qué ha cambiado desde la última vez
+uni fisica sync   regenera out/uni-fisica.ics (lo hace el timer los lunes)
+```
+
+Dos cosas que costó acertar en el parseo, y que están comentadas en el código:
+el ancla de cada celda es la HORA y no el offset de la cabecera (cortar por
+columnas partía un `15:00` en `5:00`), y hay semanas que cruzan el cambio de
+mes —«LUNES 28 … JUEVES 1»— sin que el PDF vuelva a etiquetarlo.
 
 ## Horario de clases
 

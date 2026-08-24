@@ -1,0 +1,11 @@
+[Unit]
+Description=Espeja el calendario oficial de exámenes de Física (ULL)
+# Sin red no hay nada que bajar; el timer es Persistent, así que reintenta.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# notify-send necesita el bus de sesión; systemd --user no lo hereda solo.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+ExecStart=%h/.local/bin/uni fisica sync

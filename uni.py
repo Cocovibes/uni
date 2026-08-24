@@ -11,6 +11,7 @@ uni.py — motor del vault. Lee las notas de Exámenes/ y Asignaturas/ y:
     uni sync        regenera todo (incluye el índice del grafo)
     uni indice      solo rehace los nodos curso/cuatrimestre/asignatura
     uni ull         espeja el calendario oficial de exámenes de la ESIT
+    uni fisica      lo mismo para la Sección de Física
     uni hoy         plan de hoy
     uni proximos    siguientes 14 días
     uni notificar   notificación de escritorio (la lanza el timer de systemd)
@@ -1080,6 +1081,12 @@ def cmd_ventana():
     sys.exit(ventana.abrir(sys.modules[__name__]))
 
 
+def cmd_fisica(argv):
+    """Espejo del calendario oficial de Física. Vive en su propio módulo."""
+    import fisica                            # perezoso: solo lo usa este comando
+    sys.exit(fisica.main(argv or ["sync"]))
+
+
 def cmd_ull(argv):
     """Espejo del calendario oficial de la ESIT. Vive en su propio módulo."""
     import ull                              # perezoso: solo lo usa este comando
@@ -1098,6 +1105,8 @@ if __name__ == "__main__":
         cmd_gcal(sys.argv[2:])
     elif a == "ull":
         cmd_ull(sys.argv[2:])
+    elif a == "fisica":
+        cmd_fisica(sys.argv[2:])
     elif a in CMDS:
         CMDS[a]()
     else:

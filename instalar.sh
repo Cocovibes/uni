@@ -7,6 +7,7 @@
 #   ./instalar.sh atajo        solo el atajo de teclado (Ctrl+Shift+Ñ)
 #   ./instalar.sh drive        solo la sincronización con Google Drive
 #   ./instalar.sh ull          solo los exámenes oficiales de la ESIT
+#   ./instalar.sh fisica       solo los exámenes oficiales de Física
 #
 # No usa sudo en ningún momento.
 
@@ -158,6 +159,39 @@ vigilante() {
   ok "uni-vigila.path activo — un examen nuevo o borrado se procesa al momento"
 }
 
+# ────────── exámenes oficiales de Física (semanal) ─────────────────
+# El calendario oficial de Física es UN PDF público, así que aquí basta con
+# curl y pdftotext: ni rclone ni credenciales.
+fisica() {
+  head_ "Exámenes oficiales (Física)"
+  # Solo si el vault es de Física: lo declara cada asignatura con `oficial:`,
+  # el nombre con el que la llama el calendario de la Sección. Sin eso este
+  # paso no pinta nada y no hay que dejar un timer fallando cada lunes.
+  if ! grep -qs "^oficial:" "$VAULT"/Asignaturas/*.md; then
+    info "ninguna asignatura declara 'oficial:'; me lo salto"
+    info "  es el nombre que usa el calendario de la Sección, p. ej.: oficial: \"TERMO\""
+    return 0
+  fi
+  if ! command -v pdftotext >/dev/null; then
+    warn "falta pdftotext; me lo salto"
+    warn "  En Fedora: sudo dnf install poppler-utils"
+    return 0
+  fi
+
+  d="$HOME/.config/evolution/sources"; mkdir -p "$d"
+  sed "s|@VAULT@|$VAULT|g" "$VAULT/sistema/uni-fisica.source" > "$d/uni-fisica.source"
+  ok "fuente EDS → calendario «Uni — Exámenes oficiales» (morado)"
+
+  command -v systemctl >/dev/null || { warn "Sin systemd; ejecútalo a mano."; return 0; }
+  u="$HOME/.config/systemd/user"; mkdir -p "$u"
+  cp "$VAULT/sistema/uni-fisica.service" "$u/uni-fisica.service"
+  cp "$VAULT/sistema/uni-fisica.timer" "$u/uni-fisica.timer"
+  systemctl --user daemon-reload
+  systemctl --user enable --now uni-fisica.timer
+  ok "uni-fisica.timer activo — lunes a las 09:10"
+  info "a mano: uni fisica ver   ·   qué cambió: uni fisica diff"
+}
+
 # ─────────── exámenes oficiales de la ESIT (semanal) ───────────────
 # El calendario oficial son .docx en una carpeta pública de Drive, así que
 # esto necesita el mismo rclone que la sincronización del vault.
@@ -291,8 +325,9 @@ case "${1:-todo}" in
   drive)   drive ;;
   vigilante) vigilante ;;
   ull)     ull ;;
+  fisica)  fisica ;;
   todo)
-    requisitos; plugins; comando; aviso; vigilante; atajo; drive; calendario; ull
+    requisitos; plugins; comando; aviso; vigilante; atajo; drive; calendario; ull; fisica
     head_ "Primer sync"
     mkdir -p "$VAULT/Exámenes" "$VAULT/Asignaturas"
     "$PY" "$VAULT/uni.py" sync
