@@ -1,0 +1,217 @@
+{
+  "main": {
+    "id": "993044135bbd8818",
+    "type": "split",
+    "children": [
+      {
+        "id": "b1837b1b252b3dd5",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "537c6a5e62792218",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "fb376a6468ae45a1",
+    "type": "split",
+    "children": [
+      {
+        "id": "0ab052341676be2b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "94ac63d03a465b58",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "b5b59487f9287141",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "f6f5b1c18de9623c",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "de083e73ebf9a069",
+    "type": "split",
+    "children": [
+      {
+        "id": "7452e429ae7e4135",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6ae392c4b1838de0",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "d60a4fb0700c0f1d",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "71e650e770be42e0",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "1e8765550cd009c1",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "d4661121a8584f6d",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          },
+          {
+            "id": "49b456743f991ef1",
+            "type": "leaf",
+            "state": {
+              "type": "calendar",
+              "state": {},
+              "icon": "calendar-with-checkmark",
+              "title": "Calendar"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "537c6a5e62792218",
+  "lastOpenFiles": [
+    "README.md.tmp.51468.807d45332608",
+    "__pycache__/uni.cpython-314.pyc.140282069556592",
+    "__pycache__/ull.cpython-314.pyc",
+    "uni.py.tmp.51468.cf5c72e75f83",
+    "uni.py.tmp.51468.c34b9bc2712a",
+    "instalar.sh.tmp.51468.c2dc65805980",
+    "instalar.sh.tmp.51468.13ed5e7b7c4c",
+    "instalar.sh.tmp.51468.fa816d984f12",
+    "sistema/uni-ull.timer",
+    "sistema/uni-ull.timer.tmp.51468.0e148bc932e7",
+    "sistema/uni-ull.service",
+    "Asignaturas/Fundamentos de Ingeniería Eléctrica.md",
+    "Plantillas/Examen.md",
+    "Panel.md",
+    "Ejemplos/Asignatura — Cálculo II.md",
+    "Ejemplos/Examen — Cálculo II Parcial 1.md",
+    "Exámenes/Cálculo II — Parcial 1.md",
+    "Asignaturas/Cálculo II.md",
+    "README.md",
+    "Asignaturas/Estadística.md",
+    "Exámenes/Estadística — Test 1.md"
+  ]
+}

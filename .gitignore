@@ -28,16 +28,23 @@
 # Es estado local suyo, no configuración.
 /sistema/drive.filtros.md5
 
-# ─── Estado local de Obsidian ───────────────────────────────────────
-# workspace.json se reescribe cada vez que mueves un panel.
-/.obsidian/workspace.json
+# ─── Estado de Obsidian ─────────────────────────────────────────────
+# El vault se versiona ENTERO (plugins y estado de la interfaz incluidos):
+# clonar el repo deja Obsidian listo, con la misma disposición de paneles y
+# los mismos plugins, sin depender de que instalar.sh pueda bajarlos.
+#
+# Dos peajes que esto tiene, y que son el motivo de que antes estuviera fuera:
+#   · workspace.json se reescribe cada vez que mueves un panel, así que el
+#     vault sale «modificado» a todas horas y es carne de conflicto entre
+#     máquinas;
+#   · workspace.json guarda las rutas de las notas abiertas hace poco, y esas
+#     rutas incluyen Exámenes/ y Asignaturas/, que NO se publican. Los
+#     ficheros no se suben, pero SUS NOMBRES sí.
+# workspace-mobile.json se queda fuera: es de otro dispositivo y solo estorba.
 /.obsidian/workspace-mobile.json
-/.obsidian/graph.json
-/.obsidian/appearance.json
 
-# El código de los plugins no se redistribuye: lo baja instalar.sh
-# desde el repo canónico de cada uno, verificando el id del manifest.
-/.obsidian/plugins/
+# El código de los plugins se redistribuye tal cual, con su LICENSE (los tres
+# son MIT). instalar.sh los sigue verificando por id del manifest al bajarlos.
 
 __pycache__/
 *.pyc

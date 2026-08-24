@@ -180,6 +180,27 @@ def construir_ics(exs):
 
 # ────────────────────────── cambios ────────────────────────────────
 
+def _sin_dtstamp(texto):
+    """El .ics sin las marcas de generación: lo que de verdad importa."""
+    return [l for l in texto.splitlines() if not l.startswith("DTSTAMP:")]
+
+
+def escribir_si_cambia(nuevo):
+    """Reescribe el .ics SOLO si cambió algo de fondo.
+
+    DTSTAMP lleva la hora de generación, así que reescribir a lo bruto cambia
+    las 44 líneas en cada pasada. Como este fichero SÍ se versiona (es la URL
+    a la que se suscribe el móvil), eso llenaría el historial de commits que
+    no dicen nada. Comparando sin DTSTAMP, un `sync` sin novedades no toca el
+    fichero y git no ve nada.
+    """
+    if SALIDA.exists() and \
+            _sin_dtstamp(SALIDA.read_text(encoding="utf-8")) == _sin_dtstamp(nuevo):
+        return False
+    SALIDA.write_text(nuevo, encoding="utf-8")
+    return True
+
+
 def leer_estado():
     try:
         return json.loads(ESTADO.read_text(encoding="utf-8"))
@@ -242,7 +263,7 @@ def cmd_sync(avisar=True):
     exs = examenes()
     nuevos, fuera, movidos = comparar(leer_estado(), exs)
     SALIDA.parent.mkdir(parents=True, exist_ok=True)
-    SALIDA.write_text(construir_ics(exs), encoding="utf-8")
+    escribir_si_cambia(construir_ics(exs))
     guardar_estado(exs)
 
     print(f"✓ {len(exs)} exámenes del curso {CURSO} · {SALIDA}")
