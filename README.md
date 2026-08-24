@@ -3,14 +3,15 @@
 Un vault de Obsidian que **es a la vez el motor del calendario**. Apuntas la
 fecha de un examen y aparece solo, sin tocar nada más:
 
-- el **plan de estudio** escrito dentro de la propia nota del examen, como
-  tareas con fecha;
-- los mismos eventos en el **calendario del sistema** (GNOME Calendar, enlazado
-  en vivo — no es una importación);
+- el evento en el **calendario del sistema** (GNOME Calendar, enlazado en vivo
+  — no es una importación);
+- una fila en el **surtidor** del Panel, ordenable por dificultad, por lo que
+  falta o por peso;
 - una **notificación de escritorio a las 08:30** con lo que toca hoy.
 
-La idea es que no haya que mantener nada. El sistema te dice qué hacer; tú solo
-marcas `[x]`.
+**El sistema no inventa tareas.** Solo hay obligaciones con fecha oficial:
+exámenes, prácticas y entregas. Si no lo ha puesto la ESIT o un profesor, no
+está aquí.
 
 ---
 
@@ -19,8 +20,7 @@ marcas `[x]`.
 **Ctrl + Shift + Ñ**, desde donde estés. Se abre una ventanita, rellenas
 asignatura / examen / fecha, le das a **Guardar** y ya está: la nota del examen
 creada, la nota de la asignatura también si no existía (para que el `[[enlace]]`
-no quede roto), el plan de estudio escrito dentro, y las sesiones en el
-calendario del sistema. La ventana te enseña qué ha programado y se cierra.
+no quede roto), y el evento en el calendario del sistema.
 
 **La asignatura no se escribe, se elige.** El desplegable trae las del
 cuatrimestre en curso, que sale de dos cosas que ya existen: el mes de hoy y
@@ -41,14 +41,13 @@ uni nuevo "Cálculo II" "Parcial 2" 13/11
 Sin argumentos (`uni nuevo` a secas) los pregunta uno a uno.
 
 ```bash
-uni nuevo "Física Básica 1" Final 2026-06-10 --dias "1 semana" \
-          --temas "Magnetostática,Inducción" --peso 60
+uni nuevo "Ingeniería Térmica" Final 2027-06-11 \
+          --temas "Ciclos,Transferencia de calor" --peso 60
 ```
 
 | Opción | Para qué | Def. |
 |--------|----------|------|
 | `--tipo` | `Parcial` · `Final` · `Recuperación` · `Test`. Basta el principio: `-f fin` | Parcial |
-| `--dias` | días de estudio previos. Vale `5`, `"1 semana"`, `auto` | **5** |
 | `--hora` | hora del examen | 09:00 |
 | `--temas` | separados por comas | — |
 | `--duracion` | minutos de examen | 120 |
@@ -56,9 +55,9 @@ uni nuevo "Física Básica 1" Final 2026-06-10 --dias "1 semana" \
 | `--entrega` | es un trabajo, no un examen | — |
 
 El **tipo** se elige de una lista, nunca se escribe. El **peso** vive en «Más
-opciones» a propósito: rara vez se sabe el porcentaje exacto de un examen, no
-sale en el título del evento y con `dias` explícito no decide nada — solo manda
-si pones `dias: auto`.
+opciones» a propósito: rara vez se sabe el porcentaje exacto, y no sale en el
+título del evento. Sí se usa para **estimar la dificultad** mientras no la
+pongas a mano.
 
 La fecha admite `AAAA-MM-DD` y `DD/MM` (sin año = la próxima vez que ocurra).
 
@@ -72,64 +71,30 @@ tipo: examen
 asignatura: "[[Cálculo II]]"
 fecha: 2026-11-13
 peso: 40
-dias: 5                  # días de estudio previos → 5 eventos, uno por día
+dificultad: 4            # 1-5, opcional; vacío = estimada desde el peso
 temas: [Series, Derivadas parciales]
 duracion_examen: 120
 ---
 ```
 
-## La rampa
-
-Recordar "estudia 5 días antes" no sirve de nada si el día 5 no sabes qué hacer.
-`dias: N` genera **N sesiones, una por día**, en los N días naturales anteriores
-al examen (D-N … D-1). Todas se llaman **Estudio**: lo que cambia entre ellas es
-qué hacer, y eso va en la descripción, no en el título.
-
-| Sesión | Qué toca |
-|--------|----------|
-| 1ª | Medir qué sabes. Bajar exámenes de otros años. |
-| 2ª | Los 2 temas más flojos, con apuntes. |
-| 3ª | **El diagnóstico.** 1 problema por tema, cronometrado, sin apuntes. |
-| 4ª | Repasar solo lo que falló. |
-| 5ª | Examen entero de otro año, condiciones reales. |
-| 6ª | Corregirlo, y los errores → a *Trampas*. |
-| 7ª | El formulario de memoria en un folio, de cero. Dormir 8 h. |
-
-Con menos días que sesiones se caen las menos rentables primero, **respetando
-las dependencias**: no se repasan huecos sin haber hecho antes el diagnóstico,
-ni se corrige un simulacro que no se ha hecho.
-
-| `dias` | Plan |
-|--------|------|
-| 1 | formulario de memoria |
-| 2 | simulacro · formulario |
-| 3 | diagnóstico · simulacro · formulario |
-| 4 | diagnóstico · simulacro · corrección · formulario |
-| **5** *(def.)* | diagnóstico · huecos · simulacro · corrección · formulario |
-| 7 | la rampa entera, un día cada una |
-| >7 | la rampa entera + temario de fondo en los días de delante |
-
-Si el examen está **más cerca** que la ventana pedida, el plan se encoge a los
-días que quedan en vez de generar sesiones ya pasadas.
-
-`dias: auto` vuelve al modo antiguo, en el que manda el `peso` y las sesiones se
-reparten con hueco entre ellas: **≥ 35 %** → D-14,10,7,5,3,2,1 · **15-34 %** →
-D-10,7,5,3,1 · **< 15 %** → D-5,3,1.
-
-Marcar `[x]` es seguro: `uni sync` conserva lo hecho **aunque muevas la fecha
-del examen o cambies `dias`**. Se guarda por número de día (`D-3`), que con
-sesiones idénticas es lo único que las distingue.
-
 ## Entregas
 
 Lo mismo vale para un trabajo: en la ventana, el selector de arriba cambia de
-**Examen** a **Entrega**; en la terminal, `uni nuevo -e`. La rampa funciona
-igual, el evento sale como `📦 ENTREGA — Asignatura (Práctica 3)` y el tipo
-(Parcial/Final) desaparece, que a una entrega no le pega.
+**Examen** a **Entrega**; en la terminal, `uni nuevo -e`. El evento sale como
+`📦 ENTREGA — Asignatura (Práctica 3)` y el tipo (Parcial/Final) desaparece,
+que a una entrega no le pega.
 
-Aparte de la rampa, las notas de `Asignaturas/` pueden llevar un bloque
-`semanal` que crea un evento recurrente. Esa hora fija es la que de verdad
-sube la nota; la rampa solo evita el desastre.
+## El surtidor
+
+`Panel.md` es una vista tipo base de datos sobre `Exámenes/`: una fila por
+obligación, y las cabeceras de Dataview reordenan por lo que falta, por
+dificultad, por peso o por asignatura. Hay tres cortes hechos —próximas,
+por dificultad y esta semana— más las pasadas a las que les falta la nota.
+
+**`dificultad: 1-5`** manda si la pones; si la dejas vacía se estima desde el
+`peso` (≥50 → 5, ≥35 → 4, ≥20 → 3, resto 2) solo para que la columna no salga
+en blanco. La buena es la tuya: hay asignaturas de 20 % que cuestan más que un
+final de 50 %.
 
 ## Instalación
 
@@ -158,7 +123,7 @@ Después: abre la carpeta como vault en Obsidian. Se abre en **Panel**.
 ```
 Ctrl+Shift+Ñ   la ventanita de alta rápida
 uni            plan de hoy
-uni nuevo      alta de un examen (nota + asignatura + plan + calendario)
+uni nuevo      alta de un examen (nota + asignatura + calendario)
 uni ventana    la misma ventanita, a mano
 uni proximos   siguientes 14 días
 uni sync       regenera notas + calendario + índice del grafo
@@ -202,29 +167,6 @@ Dos cosas que costó acertar en el parseo, y que están comentadas en el código
 el ancla de cada celda es la HORA y no el offset de la cabecera (cortar por
 columnas partía un `15:00` en `5:00`), y hay semanas que cruzan el cambio de
 mes —«LUNES 28 … JUEVES 1»— sin que el PDF vuelva a etiquetarlo.
-
-## Horario de clases
-
-Cada nota de `Asignaturas/` puede llevar un bloque `horario` con las clases
-fijas de la semana. Se dibuja como **rejilla semanal en la nota del
-cuatrimestre** (`Cursos/Curso — Cuatrimestre`), con enlaces a cada asignatura.
-
-**No va al calendario, y es a propósito.** Son doce eventos que se repiten cada
-semana, que ya te sabes, y que llenan la vista tapando lo único que hay que
-mirar de un vistazo: los exámenes y las sesiones de estudio. El calendario es
-para lo que cambia; el horario es para consultarlo.
-
-```yaml
-hasta: 2026-12-18
-horario:
-  - {dia: martes,    hora: "09:30", duracion: 60, tipo: Teoría}
-  - {dia: miércoles, hora: "09:30", duracion: 60, tipo: Teoría}
-  - {dia: jueves,    hora: "09:30", duracion: 60, tipo: Problemas, aula: Aula 12}
-```
-
-Aparte, el bloque `semanal` crea **una** hora fija de trabajo por asignatura.
-Esa es la que de verdad sube la nota; la rampa solo evita el desastre. Viene
-comentado en cada asignatura nueva: descoméntalo y elige un hueco.
 
 ## Notas y estadísticas
 
